@@ -1,0 +1,15 @@
+# Place electoral data Excel files here
+# Expected file: electoral-data.xlsx (or similar)
+#
+# Expected columns:
+# A - County Code
+# B - County Name  
+# C - Constituency Code
+# D - Constituency Name
+# E - Ward Code
+# F - Ward Name
+# G - Registration Centre Code
+# H - Registration Centre Name
+# I - Polling Station Code
+# J - Polling Station Name
+# K - Registered Voters
