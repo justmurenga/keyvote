@@ -1,21 +1,29 @@
 # Digital Ocean App Platform Specification
 # https://docs.digitalocean.com/products/app-platform/reference/app-spec/
+#
+# Deploy with:  doctl apps create --spec do-app-spec.yaml
+# Update with:  doctl apps update <APP_ID> --spec do-app-spec.yaml
+# Validate:     doctl apps spec validate do-app-spec.yaml
 
 name: myvote-kenya
 
 region: fra
 
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+
 services:
-  # Web Application (Next.js)
+  # ──────────────────────────────────────────
+  # Web Application (Next.js Standalone)
+  # ──────────────────────────────────────────
   - name: web
-    source_dir: /apps/web
     github:
-      repo: your-org/myvote-kenya
+      repo: mwenaro/my-Vote
       branch: main
       deploy_on_push: true
-    build_command: cd ../.. && pnpm install && pnpm build --filter=@myvote/web
-    run_command: cd apps/web && npm start
-    environment_slug: node-js
+    dockerfile_path: apps/web/Dockerfile
+    source_dir: /
     instance_size_slug: basic-xxs
     instance_count: 1
     http_port: 3000
@@ -30,43 +38,77 @@ services:
         type: SECRET
       - key: SUPABASE_SERVICE_ROLE_KEY
         type: SECRET
+      - key: NEXT_PUBLIC_APP_URL
+        type: SECRET
+      - key: NEXT_PUBLIC_APP_NAME
+        value: "myVote Kenya"
+      - key: AT_API_KEY
+        type: SECRET
+      - key: AT_USERNAME
+        type: SECRET
+      - key: AT_SENDER_ID
+        value: MYVOTE
+      - key: MPESA_CONSUMER_KEY
+        type: SECRET
+      - key: MPESA_CONSUMER_SECRET
+        type: SECRET
+      - key: MPESA_PASSKEY
+        type: SECRET
+      - key: MPESA_SHORTCODE
+        type: SECRET
+      - key: MPESA_ENVIRONMENT
+        value: live
+      - key: MPESA_CALLBACK_URL
+        type: SECRET
+      - key: SENTRY_DSN
+        type: SECRET
+      - key: NEXT_PUBLIC_POSTHOG_KEY
+        type: SECRET
+      - key: NEXT_PUBLIC_POSTHOG_HOST
+        value: "https://app.posthog.com"
     health_check:
       http_path: /api/health
+      initial_delay_seconds: 20
+      period_seconds: 30
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
 
-  # USSD Service
+  # ──────────────────────────────────────────
+  # USSD Service (Express)
+  # ──────────────────────────────────────────
   - name: ussd
-    source_dir: /apps/ussd
     github:
-      repo: your-org/myvote-kenya
+      repo: mwenaro/my-Vote
       branch: main
       deploy_on_push: true
-    build_command: cd ../.. && pnpm install && pnpm build --filter=@myvote/ussd
-    run_command: cd apps/ussd && npm start
-    environment_slug: node-js
+    dockerfile_path: apps/ussd/Dockerfile
+    source_dir: /
     instance_size_slug: basic-xxs
     instance_count: 1
     http_port: 3001
     routes:
       - path: /ussd
+        preserve_path_prefix: true
     envs:
       - key: NODE_ENV
         value: production
-      - key: SUPABASE_URL
+      - key: PORT
+        value: "3001"
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        scope: RUN_TIME
         type: SECRET
       - key: SUPABASE_SERVICE_ROLE_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: AT_API_KEY
+        type: SECRET
+      - key: AT_USERNAME
         type: SECRET
     health_check:
       http_path: /health
-
-# Static Assets (if needed)
-# static_sites:
-#   - name: assets
-#     source_dir: /apps/web/public
-#     routes:
-#       - path: /assets
-
-# Workers (background jobs)
-# workers:
-#   - name: message-processor
-#     source_dir: /apps/workers
-#     run_command: npm run process-messages
+      initial_delay_seconds: 10
+      period_seconds: 30
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3

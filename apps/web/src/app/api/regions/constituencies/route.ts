@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
     const countyId = searchParams.get('county_id');
+
+    if (!countyId) {
+      return NextResponse.json(
+        { error: 'county_id query parameter is required' },
+        { status: 400 }
+      );
+    }
 
     let query = supabase
       .from('constituencies')
       .select('id, code, name, county_id, registered_voters')
+      .eq('county_id', countyId)
       .order('name');
-
-    if (countyId) {
-      query = query.eq('county_id', countyId);
-    }
 
     const { data: constituencies, error } = await query;
 

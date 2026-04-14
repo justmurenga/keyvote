@@ -1,0 +1,55 @@
+# Dependencies (will be installed fresh in Docker)
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# Build outputs (will be built in Docker)
+.next/
+**/dist/
+**/build/
+**/out/
+
+# Environment files (injected via DO App Platform)
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Turbo cache
+.turbo/
+
+# Docs & data
+docs/
+data/
+*.md
+!README.md
+
+# Mobile (not needed for web/USSD deployment)
+apps/mobile/
+
+# Supabase local
+supabase/.temp/
+
+# CI/CD config
+.github/

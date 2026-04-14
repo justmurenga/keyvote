@@ -5,9 +5,9 @@
   "scripts": {
     "dev": "ts-node-dev --respawn src/server.ts",
     "build": "tsc",
-    "start": "node dist/apps/ussd/src/server.js",
+    "start": "node dist/server.js",
     "lint": "eslint . --ext .ts",
-    "type-check": "tsc --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@myvote/database": "workspace:*",

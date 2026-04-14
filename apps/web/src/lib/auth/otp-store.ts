@@ -6,6 +6,8 @@
 interface OTPData {
   otp: string;
   phone: string;
+  /** The email address the OTP was sent to (if email-based) */
+  email?: string;
   expiresAt: number;
   attempts: number;
   verified: boolean;
@@ -38,16 +40,19 @@ declare global {
 }
 
 /**
- * Store OTP for a phone number
+ * Store OTP for a phone number or email
  */
-export function storeOTP(phone: string, otp: string, expiresInMinutes: number = 10): void {
-  const key = normalizeKey(phone);
+export function storeOTP(identifier: string, otp: string, expiresInMinutes: number = 10): void {
+  const key = normalizeKey(identifier);
   
-  console.log('[otp-store] Storing OTP:', { phone, key, otp, expiresInMinutes });
+  console.log('[otp-store] Storing OTP:', { identifier, key, otp, expiresInMinutes });
+  
+  const isEmail = identifier.includes('@');
   
   otpStore.set(key, {
     otp,
-    phone,
+    phone: isEmail ? '' : identifier,
+    email: isEmail ? identifier : undefined,
     expiresAt: Date.now() + expiresInMinutes * 60 * 1000,
     attempts: 0,
     verified: false,
@@ -55,13 +60,13 @@ export function storeOTP(phone: string, otp: string, expiresInMinutes: number = 
 }
 
 /**
- * Verify OTP for a phone number
+ * Verify OTP for a phone number or email
  */
-export function verifyOTP(phone: string, otp: string): { valid: boolean; error?: string } {
-  const key = normalizeKey(phone);
+export function verifyOTP(identifier: string, otp: string): { valid: boolean; error?: string } {
+  const key = normalizeKey(identifier);
   const data = otpStore.get(key);
 
-  console.log('[otp-store] Verifying:', { phone, key, otp, storedData: data ? { otp: data.otp, expiresAt: data.expiresAt, attempts: data.attempts } : null });
+  console.log('[otp-store] Verifying:', { identifier, key, otp, storedData: data ? { otp: data.otp, expiresAt: data.expiresAt, attempts: data.attempts } : null });
   console.log('[otp-store] All keys in store:', Array.from(otpStore.keys()));
 
   if (!data) {
@@ -90,29 +95,29 @@ export function verifyOTP(phone: string, otp: string): { valid: boolean; error?:
 }
 
 /**
- * Check if phone has a verified OTP
+ * Check if identifier (phone or email) has a verified OTP
  */
-export function isPhoneVerified(phone: string): boolean {
-  const key = normalizeKey(phone);
+export function isPhoneVerified(identifier: string): boolean {
+  const key = normalizeKey(identifier);
   const data = otpStore.get(key);
   
   return data?.verified === true && data.expiresAt > Date.now();
 }
 
 /**
- * Clear OTP for a phone number
+ * Clear OTP for a phone number or email
  */
-export function clearOTP(phone: string): void {
-  const key = normalizeKey(phone);
+export function clearOTP(identifier: string): void {
+  const key = normalizeKey(identifier);
   otpStore.delete(key);
 }
 
 /**
  * Check if rate limited
- * Dev mode: 50 attempts per hour (very lenient)
+ * Dev mode: no rate limiting
  * Prod mode: 5 attempts per hour
  */
-export function isRateLimited(phone: string): boolean {
+export function isRateLimited(identifier: string): boolean {
   const isDev = process.env.NODE_ENV === 'development';
   
   // In dev mode, be very lenient
@@ -121,7 +126,7 @@ export function isRateLimited(phone: string): boolean {
   }
   
   // Simple rate limiting - in production, use Redis with sliding window
-  const key = `rate:${normalizeKey(phone)}`;
+  const key = `rate:${normalizeKey(identifier)}`;
   const data = otpStore.get(key);
   
   if (!data) return false;
@@ -136,18 +141,18 @@ export function isRateLimited(phone: string): boolean {
 }
 
 /**
- * Clear rate limit for a phone number (useful for testing)
+ * Clear rate limit for an identifier (useful for testing)
  */
-export function clearRateLimit(phone: string): void {
-  const key = `rate:${normalizeKey(phone)}`;
+export function clearRateLimit(identifier: string): void {
+  const key = `rate:${normalizeKey(identifier)}`;
   otpStore.delete(key);
 }
 
 /**
  * Track OTP request for rate limiting
  */
-export function trackOTPRequest(phone: string): void {
-  const key = `rate:${normalizeKey(phone)}`;
+export function trackOTPRequest(identifier: string): void {
+  const key = `rate:${normalizeKey(identifier)}`;
   const existing = otpStore.get(key);
   
   if (existing && existing.expiresAt > Date.now()) {
@@ -155,7 +160,8 @@ export function trackOTPRequest(phone: string): void {
   } else {
     otpStore.set(key, {
       otp: '',
-      phone,
+      phone: identifier.includes('@') ? '' : identifier,
+      email: identifier.includes('@') ? identifier : undefined,
       expiresAt: Date.now() + 60 * 60 * 1000, // 1 hour
       attempts: 1,
       verified: false,
@@ -163,6 +169,11 @@ export function trackOTPRequest(phone: string): void {
   }
 }
 
-function normalizeKey(phone: string): string {
-  return phone.replace(/\D/g, '');
+function normalizeKey(identifier: string): string {
+  // If it looks like an email, lowercase it as the key
+  if (identifier.includes('@')) {
+    return identifier.trim().toLowerCase();
+  }
+  // Phone number: strip non-digits
+  return identifier.replace(/\D/g, '');
 }

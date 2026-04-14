@@ -3,16 +3,19 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Vote, Phone, User, CreditCard, ArrowLeft, Loader2, CheckCircle, MapPin } from 'lucide-react';
+import { Vote, Phone, Mail, User, CreditCard, ArrowLeft, Loader2, CheckCircle, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { PollingStationSelector } from '@/components/auth/polling-station-selector';
 
-type Step = 'phone' | 'otp' | 'details' | 'polling_station';
+type Step = 'identifier' | 'otp' | 'details' | 'polling_station';
+type AuthMethod = 'phone' | 'email';
 
 export default function RegisterPage() {
-  const [step, setStep] = useState<Step>('phone');
+  const [step, setStep] = useState<Step>('identifier');
+  const [authMethod, setAuthMethod] = useState<AuthMethod>('email');
   const [phone, setPhone] = useState('');
+  const [emailInput, setEmailInput] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [formData, setFormData] = useState({
     idNumber: '',
@@ -24,7 +27,8 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [normalizedPhone, setNormalizedPhone] = useState('');
-  const [isPhoneVerified, setIsPhoneVerified] = useState(false);
+  const [normalizedEmail, setNormalizedEmail] = useState('');
+  const [isIdentifierVerified, setIsIdentifierVerified] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
   const otpInputs = useRef<(HTMLInputElement | null)[]>([]);
@@ -53,7 +57,7 @@ export default function RegisterPage() {
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validatePhone(phone)) {
+    if (authMethod === 'phone' && !validatePhone(phone)) {
       toast({
         variant: 'destructive',
         title: 'Invalid phone number',
@@ -65,13 +69,22 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      const normalized = normalizePhone(phone);
-      setNormalizedPhone(normalized);
+      let requestBody: Record<string, string>;
+
+      if (authMethod === 'email') {
+        const trimmedEmail = emailInput.trim().toLowerCase();
+        setNormalizedEmail(trimmedEmail);
+        requestBody = { email: trimmedEmail };
+      } else {
+        const normalized = normalizePhone(phone);
+        setNormalizedPhone(normalized);
+        requestBody = { phone: normalized };
+      }
 
       const response = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: normalized }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -88,9 +101,10 @@ export default function RegisterPage() {
           duration: 30000, // Show for 30 seconds
         });
       } else {
+        const destination = authMethod === 'email' ? emailInput : normalizePhone(phone);
         toast({
           title: 'OTP sent!',
-          description: `Enter the 6-digit code sent to ${normalized}`,
+          description: `Enter the 6-digit code sent to ${destination}`,
         });
       }
 
@@ -154,14 +168,20 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
+      const verifyBody: Record<string, string> = {
+        otp: otpCode,
+        action: 'register',
+      };
+      if (authMethod === 'email') {
+        verifyBody.email = normalizedEmail;
+      } else {
+        verifyBody.phone = normalizedPhone;
+      }
+
       const response = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          phone: normalizedPhone, 
-          otp: otpCode,
-          action: 'register',
-        }),
+        body: JSON.stringify(verifyBody),
       });
 
       const data = await response.json();
@@ -170,9 +190,9 @@ export default function RegisterPage() {
         throw new Error(data.error || 'Failed to verify OTP');
       }
 
-      setIsPhoneVerified(true);
+      setIsIdentifierVerified(true);
       toast({
-        title: 'Phone verified!',
+        title: authMethod === 'email' ? 'Email verified!' : 'Phone verified!',
         description: 'Now complete your profile to create your account.',
       });
       setStep('details');
@@ -193,10 +213,14 @@ export default function RegisterPage() {
 
     setIsLoading(true);
     try {
+      const resendBody: Record<string, string> = authMethod === 'email'
+        ? { email: normalizedEmail }
+        : { phone: normalizedPhone };
+
       const response = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: normalizedPhone }),
+        body: JSON.stringify(resendBody),
       });
 
       const data = await response.json();
@@ -205,10 +229,21 @@ export default function RegisterPage() {
         throw new Error(data.error || 'Failed to resend OTP');
       }
 
-      toast({
-        title: 'OTP resent!',
-        description: 'Check your phone for the new code.',
-      });
+      // DEV MODE: Show OTP in toast if returned
+      if (data.devOtp) {
+        toast({
+          title: 'DEV MODE - OTP resent!',
+          description: `Your OTP is: ${data.devOtp}`,
+          duration: 30000,
+        });
+      } else {
+        toast({
+          title: 'OTP resent!',
+          description: authMethod === 'email'
+            ? 'Check your email for the new code.'
+            : 'Check your phone for the new code.',
+        });
+      }
       setOtp(['', '', '', '', '', '']);
       setCountdown(60);
       otpInputs.current[0]?.focus();
@@ -253,8 +288,8 @@ export default function RegisterPage() {
     setStep('polling_station');
   };
 
-  const handleFinalRegister = async () => {
-    if (!pollingStationId) {
+  const handleFinalRegister = async (skipPollingStation = false) => {
+    if (!skipPollingStation && !pollingStationId) {
       toast({
         variant: 'destructive',
         title: 'Select a polling station',
@@ -266,16 +301,26 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
+      const payload: Record<string, string> = {
+        idNumber: formData.idNumber,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+      };
+
+      if (authMethod === 'email') {
+        payload.email = normalizedEmail;
+      } else {
+        payload.phone = normalizedPhone;
+      }
+
+      if (pollingStationId) {
+        payload.pollingStationId = pollingStationId;
+      }
+
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: normalizedPhone,
-          idNumber: formData.idNumber,
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          pollingStationId: pollingStationId,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
@@ -304,7 +349,7 @@ export default function RegisterPage() {
 
   const getStepNumber = () => {
     switch (step) {
-      case 'phone': return 1;
+      case 'identifier': return 1;
       case 'otp': return 2;
       case 'details': return 3;
       case 'polling_station': return 4;
@@ -324,13 +369,13 @@ export default function RegisterPage() {
             participating in polls, and staying informed about elections.
           </p>
           <div className="space-y-4">
-            <div className={`flex items-center space-x-3 ${step === 'phone' ? 'opacity-100' : 'opacity-60'}`}>
+            <div className={`flex items-center space-x-3 ${step === 'identifier' ? 'opacity-100' : 'opacity-60'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                 getStepNumber() > 1 ? 'bg-white/40' : 'bg-white/20'
               }`}>
                 {getStepNumber() > 1 ? <CheckCircle className="h-5 w-5" /> : '1'}
               </div>
-              <span>Enter your phone number</span>
+              <span>Enter your email or phone number</span>
             </div>
             <div className={`flex items-center space-x-3 ${step === 'otp' ? 'opacity-100' : 'opacity-60'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
@@ -368,8 +413,8 @@ export default function RegisterPage() {
             </Link>
             <h1 className="mt-6 text-2xl font-bold">Create your account</h1>
             <p className="mt-2 text-muted-foreground">
-              {step === 'phone' && 'Enter your phone number to get started'}
-              {step === 'otp' && `Enter the code sent to ${normalizedPhone}`}
+              {step === 'identifier' && 'Enter your email or phone number to get started'}
+              {step === 'otp' && `Enter the code sent to ${authMethod === 'email' ? normalizedEmail : normalizedPhone}`}
               {step === 'details' && 'Complete your profile information'}
               {step === 'polling_station' && 'Select your polling station'}
             </p>
@@ -383,29 +428,80 @@ export default function RegisterPage() {
             <div className={`flex-1 h-2 rounded-full ${getStepNumber() >= 4 ? 'bg-primary' : 'bg-muted'}`} />
           </div>
 
-          {/* Step 1: Phone */}
-          {step === 'phone' && (
+          {/* Step 1: Email or Phone */}
+          {step === 'identifier' && (
             <form onSubmit={handleSendOTP} className="space-y-6">
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium mb-2">
-                  Phone Number
-                </label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <input
-                    id="phone"
-                    type="tel"
-                    placeholder="0712 345 678"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background"
-                    required
-                  />
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  We&apos;ll send you a verification code
-                </p>
+              {/* Auth method toggle */}
+              <div className="flex rounded-lg border p-1 bg-muted/50">
+                <button
+                  type="button"
+                  onClick={() => setAuthMethod('email')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                    authMethod === 'email'
+                      ? 'bg-background shadow-sm text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Mail className="h-4 w-4" />
+                  Email
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthMethod('phone')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                    authMethod === 'phone'
+                      ? 'bg-background shadow-sm text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Phone className="h-4 w-4" />
+                  Phone
+                </button>
               </div>
+
+              {authMethod === 'email' ? (
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium mb-2">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <input
+                      id="email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+                      required
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    We&apos;ll send you a verification code via email
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label htmlFor="phone" className="block text-sm font-medium mb-2">
+                    Phone Number
+                  </label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <input
+                      id="phone"
+                      type="tel"
+                      placeholder="0712 345 678"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+                      required
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    We&apos;ll send you a verification code via SMS
+                  </p>
+                </div>
+              )}
 
               <Button type="submit" className="w-full py-6" disabled={isLoading}>
                 {isLoading ? (
@@ -426,13 +522,13 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setStep('phone');
+                  setStep('identifier');
                   setOtp(['', '', '', '', '', '']);
                 }}
                 className="flex items-center text-sm text-muted-foreground hover:text-foreground"
               >
                 <ArrowLeft className="mr-1 h-4 w-4" />
-                Change number
+                Change {authMethod === 'email' ? 'email' : 'number'}
               </button>
 
               <div>
@@ -463,7 +559,7 @@ export default function RegisterPage() {
                     Verifying...
                   </>
                 ) : (
-                  'Verify Phone'
+                  'Verify'
                 )}
               </Button>
 
@@ -493,7 +589,7 @@ export default function RegisterPage() {
               <div className="flex items-center justify-center mb-4">
                 <div className="flex items-center text-sm text-green-600 bg-green-50 dark:bg-green-900/20 px-3 py-1.5 rounded-full">
                   <CheckCircle className="mr-1.5 h-4 w-4" />
-                  Phone verified: {normalizedPhone}
+                  {authMethod === 'email' ? `Email verified: ${normalizedEmail}` : `Phone verified: ${normalizedPhone}`}
                 </div>
               </div>
 
@@ -604,7 +700,7 @@ export default function RegisterPage() {
               </div>
 
               <Button
-                onClick={handleFinalRegister}
+                onClick={() => handleFinalRegister(false)}
                 className="w-full py-6"
                 disabled={isLoading || !pollingStationId}
               >
@@ -623,7 +719,7 @@ export default function RegisterPage() {
 
               <button
                 type="button"
-                onClick={handleFinalRegister}
+                onClick={() => handleFinalRegister(true)}
                 disabled={isLoading}
                 className="w-full text-sm text-muted-foreground hover:text-foreground text-center"
               >

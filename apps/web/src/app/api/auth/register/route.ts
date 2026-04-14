@@ -10,6 +10,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { 
       phone, 
+      email: rawEmail,
       idNumber, 
       firstName, 
       lastName,
@@ -17,38 +18,58 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!phone || !idNumber || !firstName || !lastName) {
+    if ((!phone && !rawEmail) || !idNumber || !firstName || !lastName) {
       return NextResponse.json(
         { error: 'All fields are required' },
         { status: 400 }
       );
     }
 
-    // Normalize phone number
-    const normalizedPhone = normalizePhoneNumber(phone);
+    // Determine the verified identifier (email or phone)
+    const isEmailBased = !!rawEmail;
+    const normalizedEmail = rawEmail ? rawEmail.trim().toLowerCase() : null;
+    const normalizedPhone = phone ? normalizePhoneNumber(phone) : null;
+    const verifiedIdentifier = isEmailBased ? normalizedEmail! : normalizedPhone!;
 
-    // Check if phone was verified via OTP
-    if (!isPhoneVerified(normalizedPhone)) {
+    // Check if identifier was verified via OTP
+    if (!isPhoneVerified(verifiedIdentifier)) {
       return NextResponse.json(
-        { error: 'Phone number not verified. Please verify your phone first.' },
+        { error: `${isEmailBased ? 'Email' : 'Phone number'} not verified. Please verify first.` },
         { status: 400 }
       );
     }
 
     const adminClient = createAdminClient();
 
-    // Check if user already exists
-    const { data: existingUser } = await adminClient
-      .from('users')
-      .select('id')
-      .eq('phone', normalizedPhone)
-      .single();
+    // Check if user already exists by phone or email
+    if (normalizedPhone) {
+      const { data: existingUser } = await adminClient
+        .from('users')
+        .select('id')
+        .eq('phone', normalizedPhone)
+        .single();
 
-    if (existingUser) {
-      return NextResponse.json(
-        { error: 'An account with this phone number already exists' },
-        { status: 409 }
-      );
+      if (existingUser) {
+        return NextResponse.json(
+          { error: 'An account with this phone number already exists' },
+          { status: 409 }
+        );
+      }
+    }
+
+    if (normalizedEmail) {
+      const { data: existingEmailUser } = await adminClient
+        .from('users')
+        .select('id')
+        .eq('email', normalizedEmail)
+        .single();
+
+      if (existingEmailUser) {
+        return NextResponse.json(
+          { error: 'An account with this email address already exists' },
+          { status: 409 }
+        );
+      }
     }
 
     // Check if ID number is already registered
@@ -65,19 +86,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create email from phone (workaround for Supabase phone auth)
-    const email = `${normalizedPhone.replace('+', '')}@myvote.ke`;
+    // Create email from phone (workaround for Supabase phone auth) or use real email
+    const email = normalizedEmail || `${normalizedPhone!.replace('+', '')}@myvote.ke`;
     const fullName = `${firstName} ${lastName}`;
 
     // Create auth user
     const { data: authUser, error: authError } = await adminClient.auth.admin.createUser({
       email,
       email_confirm: true,
-      phone: normalizedPhone,
-      phone_confirm: true,
+      ...(normalizedPhone ? { phone: normalizedPhone, phone_confirm: true } : {}),
       user_metadata: {
         full_name: fullName,
-        phone: normalizedPhone,
+        ...(normalizedPhone ? { phone: normalizedPhone } : {}),
+        email,
       },
     });
 
@@ -92,7 +113,7 @@ export async function POST(request: NextRequest) {
     // Create user profile in users table
     const userInsert: Record<string, unknown> = {
       id: authUser.user.id,
-      phone: normalizedPhone,
+      phone: normalizedPhone || null,
       email,
       full_name: fullName,
       id_number: idNumber,
@@ -129,7 +150,7 @@ export async function POST(request: NextRequest) {
       });
 
     // Clear OTP after successful registration
-    clearOTP(normalizedPhone);
+    clearOTP(verifiedIdentifier);
 
     // Generate session for the new user
     const { data: sessionData, error: sessionError } = await adminClient.auth.admin.generateLink({
@@ -146,6 +167,7 @@ export async function POST(request: NextRequest) {
       user: {
         id: authUser.user.id,
         phone: normalizedPhone,
+        email,
         fullName,
       },
       redirectTo: '/auth/login?registered=true',

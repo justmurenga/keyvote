@@ -8,23 +8,28 @@ import { createServerClient } from '@supabase/ssr';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { phone, otp, action = 'login' } = body;
+    const { phone, email, otp, action = 'login' } = body;
 
-    console.log('[verify-otp] Received:', { phone, otp, action });
+    console.log('[verify-otp] Received:', { phone, email, otp, action });
 
-    if (!phone || !otp) {
+    // Must have either phone or email, plus OTP
+    if ((!phone && !email) || !otp) {
       return NextResponse.json(
-        { error: 'Phone number and OTP are required' },
+        { error: 'Phone/email and OTP are required' },
         { status: 400 }
       );
     }
 
-    // Normalize phone number
-    const normalizedPhone = normalizePhoneNumber(phone);
-    console.log('[verify-otp] Normalized phone:', normalizedPhone);
+    // Determine the identifier used for OTP lookup
+    const identifier = email
+      ? email.trim().toLowerCase()
+      : normalizePhoneNumber(phone);
+    const isEmailBased = !!email;
+
+    console.log('[verify-otp] Identifier:', identifier, 'isEmailBased:', isEmailBased);
 
     // Verify OTP
-    const verification = verifyStoredOTP(normalizedPhone, otp);
+    const verification = verifyStoredOTP(identifier, otp);
     console.log('[verify-otp] Verification result:', verification);
 
     if (!verification.valid) {
@@ -37,30 +42,43 @@ export async function POST(request: NextRequest) {
     const adminClient = createAdminClient();
 
     if (action === 'login') {
-      // Check if user exists
-      const { data: existingUser } = await adminClient
-        .from('users')
-        .select('id, phone, full_name, role')
-        .eq('phone', normalizedPhone)
-        .single() as { data: { id: string; phone: string; full_name: string; role: string } | null; error: any };
+      // Check if user exists — search by email or phone
+      let existingUser: { id: string; phone: string; full_name: string; role: string; email?: string } | null = null;
+
+      if (isEmailBased) {
+        const { data } = await adminClient
+          .from('users')
+          .select('id, phone, full_name, role, email')
+          .eq('email', identifier)
+          .single();
+        existingUser = data as typeof existingUser;
+      } else {
+        const { data } = await adminClient
+          .from('users')
+          .select('id, phone, full_name, role, email')
+          .eq('phone', identifier)
+          .single();
+        existingUser = data as typeof existingUser;
+      }
 
       let user = existingUser;
 
-      // If no user exists, auto-create one (seamless sign-up via phone)
+      // If no user exists, auto-create one (seamless sign-up)
       if (!user) {
-        console.log('[verify-otp] No user found, auto-creating account for:', normalizedPhone);
+        console.log('[verify-otp] No user found, auto-creating account for:', identifier);
 
-        const email = `${normalizedPhone.replace('+', '')}@myvote.ke`;
+        const userEmail = isEmailBased ? identifier : `${identifier.replace('+', '')}@myvote.ke`;
+        const userPhone = isEmailBased ? '' : identifier;
 
         // Create auth user in Supabase
         const { data: authUser, error: authError } = await adminClient.auth.admin.createUser({
-          email,
+          email: userEmail,
           email_confirm: true,
-          phone: normalizedPhone,
-          phone_confirm: true,
+          ...(userPhone ? { phone: userPhone, phone_confirm: true } : {}),
           user_metadata: {
             full_name: 'New User',
-            phone: normalizedPhone,
+            ...(userPhone ? { phone: userPhone } : {}),
+            email: userEmail,
           },
         });
 
@@ -79,8 +97,8 @@ export async function POST(request: NextRequest) {
           .from('users')
           .insert({
             id: authUser.user.id,
-            phone: normalizedPhone,
-            email,
+            phone: userPhone || null,
+            email: userEmail,
             full_name: 'New User',
             is_verified: true,
             role: 'voter',
@@ -96,13 +114,14 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        console.log('[verify-otp] User profile created for:', normalizedPhone);
+        console.log('[verify-otp] User profile created for:', identifier);
 
         user = {
           id: authUser.user.id,
-          phone: normalizedPhone,
+          phone: userPhone,
           full_name: 'New User',
           role: 'voter',
+          email: userEmail,
         };
       }
 
@@ -113,12 +132,13 @@ export async function POST(request: NextRequest) {
         .eq('id', user.id);
 
       // Clear OTP after successful verification
-      clearOTP(normalizedPhone);
+      clearOTP(identifier);
 
       // Create session data
       const sessionData = {
         userId: user.id,
         phone: user.phone,
+        email: user.email,
         fullName: user.full_name,
         role: user.role,
         expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
@@ -149,7 +169,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       verified: true,
-      phone: normalizedPhone,
+      phone: phone ? normalizePhoneNumber(phone) : undefined,
+      email: email ? email.trim().toLowerCase() : undefined,
     });
   } catch (error) {
     console.error('Verify OTP error:', error);

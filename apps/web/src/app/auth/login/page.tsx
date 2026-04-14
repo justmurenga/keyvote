@@ -3,20 +3,24 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Vote, Phone, ArrowLeft, Loader2 } from 'lucide-react';
+import { Vote, Phone, Mail, ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { createClient } from '@/lib/supabase/client';
 
-type Step = 'phone' | 'otp';
+type Step = 'identifier' | 'otp';
+type AuthMethod = 'phone' | 'email';
 
 export default function LoginPage() {
-  const [step, setStep] = useState<Step>('phone');
+  const [step, setStep] = useState<Step>('identifier');
+  const [authMethod, setAuthMethod] = useState<AuthMethod>('email');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [normalizedPhone, setNormalizedPhone] = useState('');
+  const [normalizedEmail, setNormalizedEmail] = useState('');
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -54,13 +58,22 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const normalized = normalizePhone(phone);
-      setNormalizedPhone(normalized);
+      let requestBody: Record<string, string>;
+
+      if (authMethod === 'email') {
+        const trimmedEmail = email.trim().toLowerCase();
+        setNormalizedEmail(trimmedEmail);
+        requestBody = { email: trimmedEmail };
+      } else {
+        const normalized = normalizePhone(phone);
+        setNormalizedPhone(normalized);
+        requestBody = { phone: normalized };
+      }
 
       const response = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: normalized }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -77,9 +90,10 @@ export default function LoginPage() {
           duration: 30000, // Show for 30 seconds
         });
       } else {
+        const destination = authMethod === 'email' ? email : normalizePhone(phone);
         toast({
           title: 'OTP sent!',
-          description: `Enter the 6-digit code sent to ${normalized}`,
+          description: `Enter the 6-digit code sent to ${destination}`,
         });
       }
 
@@ -147,14 +161,20 @@ export default function LoginPage() {
 
     try {
       // Verify OTP and login in one call
+      const verifyBody: Record<string, string> = {
+        otp: otpCode,
+        action: 'login',
+      };
+      if (authMethod === 'email') {
+        verifyBody.email = normalizedEmail;
+      } else {
+        verifyBody.phone = normalizedPhone;
+      }
+
       const verifyResponse = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          phone: normalizedPhone, 
-          otp: otpCode,
-          action: 'login',
-        }),
+        body: JSON.stringify(verifyBody),
       });
 
       const verifyData = await verifyResponse.json();
@@ -201,10 +221,14 @@ export default function LoginPage() {
 
     setIsLoading(true);
     try {
+      const resendBody: Record<string, string> = authMethod === 'email'
+        ? { email: normalizedEmail }
+        : { phone: normalizedPhone };
+
       const response = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: normalizedPhone }),
+        body: JSON.stringify(resendBody),
       });
 
       const data = await response.json();
@@ -213,10 +237,21 @@ export default function LoginPage() {
         throw new Error(data.error || 'Failed to resend OTP');
       }
 
-      toast({
-        title: 'OTP resent!',
-        description: 'Check your phone for the new code.',
-      });
+      // DEV MODE: Show OTP in toast if returned
+      if (data.devOtp) {
+        toast({
+          title: 'DEV MODE - OTP resent!',
+          description: `Your OTP is: ${data.devOtp}`,
+          duration: 30000,
+        });
+      } else {
+        toast({
+          title: 'OTP resent!',
+          description: authMethod === 'email'
+            ? 'Check your email for the new code.'
+            : 'Check your phone for the new code.',
+        });
+      }
       setOtp(['', '', '', '', '', '']);
       setCountdown(60);
       otpInputs.current[0]?.focus();
@@ -243,35 +278,86 @@ export default function LoginPage() {
             </Link>
             <h1 className="mt-6 text-2xl font-bold">Welcome back</h1>
             <p className="mt-2 text-muted-foreground">
-              {step === 'phone' 
-                ? 'Sign in to your account with your phone number'
-                : `Enter the code sent to ${normalizedPhone}`
+              {step === 'identifier' 
+                ? 'Sign in to your account'
+                : `Enter the code sent to ${authMethod === 'email' ? normalizedEmail : normalizedPhone}`
               }
             </p>
           </div>
 
-          {step === 'phone' && (
+          {step === 'identifier' && (
             <form onSubmit={handleSendOTP} className="space-y-6">
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium mb-2">
-                  Phone Number
-                </label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <input
-                    id="phone"
-                    type="tel"
-                    placeholder="0712 345 678"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background"
-                    required
-                  />
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  We&apos;ll send you a one-time verification code
-                </p>
+              {/* Auth method toggle */}
+              <div className="flex rounded-lg border p-1 bg-muted/50">
+                <button
+                  type="button"
+                  onClick={() => setAuthMethod('email')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                    authMethod === 'email'
+                      ? 'bg-background shadow-sm text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Mail className="h-4 w-4" />
+                  Email
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthMethod('phone')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                    authMethod === 'phone'
+                      ? 'bg-background shadow-sm text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Phone className="h-4 w-4" />
+                  Phone
+                </button>
               </div>
+
+              {authMethod === 'email' ? (
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium mb-2">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <input
+                      id="email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+                      required
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    We&apos;ll send you a one-time verification code via email
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label htmlFor="phone" className="block text-sm font-medium mb-2">
+                    Phone Number
+                  </label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <input
+                      id="phone"
+                      type="tel"
+                      placeholder="0712 345 678"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+                      required
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    We&apos;ll send you a one-time verification code via SMS
+                  </p>
+                </div>
+              )}
 
               <Button type="submit" className="w-full py-6" disabled={isLoading}>
                 {isLoading ? (
@@ -291,13 +377,13 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setStep('phone');
+                  setStep('identifier');
                   setOtp(['', '', '', '', '', '']);
                 }}
                 className="flex items-center text-sm text-muted-foreground hover:text-foreground"
               >
                 <ArrowLeft className="mr-1 h-4 w-4" />
-                Change number
+                Change {authMethod === 'email' ? 'email' : 'number'}
               </button>
 
               <div>
