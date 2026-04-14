@@ -3,9 +3,12 @@
 # Multi-stage build for Digital Ocean App Platform
 # ──────────────────────────────────────────
 
+# ── Base: shared Node + pnpm layer ────────
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@8.14.0 --activate
+
 # ── Stage 1: Install dependencies ─────────
-FROM node:20-alpine AS deps
-RUN corepack enable && corepack prepare pnpm@8 --activate
+FROM base AS deps
 
 WORKDIR /app
 
@@ -21,19 +24,14 @@ COPY packages/shared/package.json ./packages/shared/
 RUN pnpm install --frozen-lockfile
 
 # ── Stage 2: Build the application ────────
-FROM node:20-alpine AS builder
-RUN corepack enable && corepack prepare pnpm@8 --activate
+FROM base AS builder
 
 WORKDIR /app
 
-# Copy dependencies from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/ussd/node_modules ./apps/ussd/node_modules
-COPY --from=deps /app/packages/database/node_modules ./packages/database/node_modules
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+# Copy entire workspace from deps (preserves pnpm symlink structure)
+COPY --from=deps /app ./
 
-# Copy source code
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+# Overlay source code from build context
 COPY apps/ussd/ ./apps/ussd/
 COPY packages/database/ ./packages/database/
 COPY packages/shared/ ./packages/shared/
@@ -56,8 +54,9 @@ RUN addgroup --system --gid 1001 nodejs && \
 # Copy built output and production dependencies
 COPY --from=builder /app/apps/ussd/dist ./dist
 COPY --from=builder /app/apps/ussd/package.json ./package.json
-COPY --from=deps /app/apps/ussd/node_modules ./node_modules
-# Copy workspace packages that are needed at runtime
+# Copy root node_modules (Docker dereferences pnpm symlinks into real files)
+COPY --from=deps /app/node_modules ./node_modules
+# Overlay built workspace packages
 COPY --from=builder /app/packages/database/dist ./node_modules/@myvote/database/dist
 COPY --from=builder /app/packages/database/package.json ./node_modules/@myvote/database/package.json
 COPY --from=builder /app/packages/shared/dist ./node_modules/@myvote/shared/dist

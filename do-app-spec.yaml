@@ -19,7 +19,7 @@ services:
   # ──────────────────────────────────────────
   - name: web
     github:
-      repo: mwenaro/my-Vote
+      repo: justmurenga/keyvote
       branch: main
       deploy_on_push: true
     dockerfile_path: apps/web/Dockerfile
@@ -79,7 +79,7 @@ services:
   # ──────────────────────────────────────────
   - name: ussd
     github:
-      repo: mwenaro/my-Vote
+      repo: justmurenga/keyvote
       branch: main
       deploy_on_push: true
     dockerfile_path: apps/ussd/Dockerfile

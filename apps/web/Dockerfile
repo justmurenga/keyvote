@@ -3,10 +3,13 @@
 # Multi-stage build for Digital Ocean App Platform
 # ──────────────────────────────────────────
 
-# ── Stage 1: Install dependencies ─────────
-FROM node:20-alpine AS deps
+# ── Base: shared Node + pnpm layer ────────
+FROM node:20-alpine AS base
 RUN apk add --no-cache libc6-compat
-RUN corepack enable && corepack prepare pnpm@8 --activate
+RUN corepack enable && corepack prepare pnpm@8.14.0 --activate
+
+# ── Stage 1: Install dependencies ─────────
+FROM base AS deps
 
 WORKDIR /app
 
@@ -22,19 +25,14 @@ COPY packages/shared/package.json ./packages/shared/
 RUN pnpm install --frozen-lockfile
 
 # ── Stage 2: Build the application ────────
-FROM node:20-alpine AS builder
-RUN corepack enable && corepack prepare pnpm@8 --activate
+FROM base AS builder
 
 WORKDIR /app
 
-# Copy dependencies from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
-COPY --from=deps /app/packages/database/node_modules ./packages/database/node_modules
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+# Copy entire workspace from deps (preserves pnpm symlink structure)
+COPY --from=deps /app ./
 
-# Copy source code
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+# Overlay source code from build context
 COPY apps/web/ ./apps/web/
 COPY packages/database/ ./packages/database/
 COPY packages/shared/ ./packages/shared/
