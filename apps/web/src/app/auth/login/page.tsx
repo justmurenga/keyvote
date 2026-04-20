@@ -13,7 +13,7 @@ type AuthMethod = 'phone' | 'email';
 
 function LoginPageContent() {
   const [step, setStep] = useState<Step>('identifier');
-  const [authMethod, setAuthMethod] = useState<AuthMethod>('email');
+  const [authMethod, setAuthMethod] = useState<AuthMethod>('phone');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -273,18 +273,6 @@ function LoginPageContent() {
               <div className="flex rounded-lg border p-1 bg-muted/50">
                 <button
                   type="button"
-                  onClick={() => setAuthMethod('email')}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                    authMethod === 'email'
-                      ? 'bg-background shadow-sm text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <Mail className="h-4 w-4" />
-                  Email
-                </button>
-                <button
-                  type="button"
                   onClick={() => setAuthMethod('phone')}
                   className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
                     authMethod === 'phone'
@@ -295,30 +283,21 @@ function LoginPageContent() {
                   <Phone className="h-4 w-4" />
                   Phone
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthMethod('email')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                    authMethod === 'email'
+                      ? 'bg-background shadow-sm text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Mail className="h-4 w-4" />
+                  Email
+                </button>
               </div>
 
-              {authMethod === 'email' ? (
-                <div>
-                  <label htmlFor="email" className="block text-sm font-medium mb-2">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    <input
-                      id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background"
-                      required
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    We&apos;ll send you a one-time verification code via email
-                  </p>
-                </div>
-              ) : (
+              {authMethod === 'phone' ? (
                 <div>
                   <label htmlFor="phone" className="block text-sm font-medium mb-2">
                     Phone Number
@@ -337,6 +316,27 @@ function LoginPageContent() {
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
                     We&apos;ll send you a one-time verification code via SMS
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium mb-2">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <input
+                      id="email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+                      required
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    We&apos;ll send you a one-time verification code via email
                   </p>
                 </div>
               )}

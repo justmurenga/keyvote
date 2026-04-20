@@ -25,8 +25,8 @@ async function getServicePricing(): Promise<Record<string, { amount: number; des
 
     if (settings?.value && Array.isArray(settings.value)) {
       const pricing: Record<string, { amount: number; description: string }> = {};
-      for (const item of settings.value) {
-        if (item.is_active) {
+      for (const item of settings.value as any[]) {
+        if (item?.is_active) {
           pricing[item.id] = { amount: item.price, description: item.name };
         }
       }

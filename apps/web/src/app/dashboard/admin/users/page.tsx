@@ -17,15 +17,42 @@ interface User {
   full_name: string;
   email: string | null;
   role: string;
+  gender: string | null;
+  age_bracket: string | null;
+  id_number: string | null;
+  bio: string | null;
   is_active: boolean;
   is_verified: boolean;
   profile_photo_url: string | null;
   county: { id: number; name: string } | null;
   constituency: { id: number; name: string } | null;
   ward: { id: number; name: string } | null;
+  county_id: number | null;
+  constituency_id: number | null;
+  ward_id: number | null;
   created_at: string;
   last_login: string | null;
 }
+
+interface LocationOption {
+  id: number;
+  name: string;
+}
+
+const GENDER_OPTIONS = [
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' },
+  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+];
+
+const AGE_BRACKET_OPTIONS = [
+  { value: '18-24', label: '18-24' },
+  { value: '25-34', label: '25-34' },
+  { value: '35-44', label: '35-44' },
+  { value: '45-54', label: '45-54' },
+  { value: '55-64', label: '55-64' },
+  { value: '65+', label: '65+' },
+];
 
 interface UsersResponse {
   users: User[];
@@ -74,15 +101,136 @@ export default function AdminUsersPage() {
     full_name: string;
     email: string;
     role: string;
+    gender: string;
+    age_bracket: string;
+    id_number: string;
+    bio: string;
+    county_id: string;
+    constituency_id: string;
+    ward_id: string;
   }>({
     phone: '',
     full_name: '',
     email: '',
     role: ROLES.VOTER,
+    gender: '',
+    age_bracket: '',
+    id_number: '',
+    bio: '',
+    county_id: '',
+    constituency_id: '',
+    ward_id: '',
   });
+
+  // Edit form
+  const [editForm, setEditForm] = useState<{
+    full_name: string;
+    email: string;
+    gender: string;
+    age_bracket: string;
+    id_number: string;
+    bio: string;
+    county_id: string;
+    constituency_id: string;
+    ward_id: string;
+    is_verified: boolean;
+  }>({
+    full_name: '',
+    email: '',
+    gender: '',
+    age_bracket: '',
+    id_number: '',
+    bio: '',
+    county_id: '',
+    constituency_id: '',
+    ward_id: '',
+    is_verified: false,
+  });
+
+  // Location data
+  const [counties, setCounties] = useState<LocationOption[]>([]);
+  const [constituencies, setConstituencies] = useState<LocationOption[]>([]);
+  const [wards, setWards] = useState<LocationOption[]>([]);
+  const [editConstituencies, setEditConstituencies] = useState<LocationOption[]>([]);
+  const [editWards, setEditWards] = useState<LocationOption[]>([]);
 
   const searchRef = useRef(search);
   searchRef.current = search;
+
+  // Fetch counties on mount
+  useEffect(() => {
+    const fetchCounties = async () => {
+      try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        if (!supabaseUrl || !supabaseKey) return;
+        const res = await fetch(`${supabaseUrl}/rest/v1/counties?select=id,name&order=name`, {
+          headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+        });
+        if (res.ok) setCounties(await res.json());
+      } catch {}
+    };
+    fetchCounties();
+  }, []);
+
+  const fetchConstituencies = async (countyId: string, target: 'create' | 'edit') => {
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !supabaseKey || !countyId) {
+        target === 'create' ? setConstituencies([]) : setEditConstituencies([]);
+        return;
+      }
+      const res = await fetch(`${supabaseUrl}/rest/v1/constituencies?select=id,name&county_id=eq.${countyId}&order=name`, {
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        target === 'create' ? setConstituencies(data) : setEditConstituencies(data);
+      }
+    } catch {}
+  };
+
+  const fetchWards = async (constituencyId: string, target: 'create' | 'edit') => {
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !supabaseKey || !constituencyId) {
+        target === 'create' ? setWards([]) : setEditWards([]);
+        return;
+      }
+      const res = await fetch(`${supabaseUrl}/rest/v1/wards?select=id,name&constituency_id=eq.${constituencyId}&order=name`, {
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        target === 'create' ? setWards(data) : setEditWards(data);
+      }
+    } catch {}
+  };
+
+  // Initialize edit form when editing user changes
+  useEffect(() => {
+    if (editingUser) {
+      setEditForm({
+        full_name: editingUser.full_name || '',
+        email: editingUser.email || '',
+        gender: editingUser.gender || '',
+        age_bracket: editingUser.age_bracket || '',
+        id_number: editingUser.id_number || '',
+        bio: editingUser.bio || '',
+        county_id: editingUser.county_id?.toString() || editingUser.county?.id?.toString() || '',
+        constituency_id: editingUser.constituency_id?.toString() || editingUser.constituency?.id?.toString() || '',
+        ward_id: editingUser.ward_id?.toString() || editingUser.ward?.id?.toString() || '',
+        is_verified: editingUser.is_verified,
+      });
+      // Load constituencies/wards for existing location
+      const cId = editingUser.county_id?.toString() || editingUser.county?.id?.toString();
+      if (cId) fetchConstituencies(cId, 'edit');
+      const conId = editingUser.constituency_id?.toString() || editingUser.constituency?.id?.toString();
+      if (conId) fetchWards(conId, 'edit');
+    }
+  }, [editingUser]);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -180,10 +328,24 @@ export default function AdminUsersPage() {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const payload: Record<string, any> = {
+        phone: createForm.phone,
+        full_name: createForm.full_name,
+        email: createForm.email || undefined,
+        role: createForm.role,
+      };
+      if (createForm.gender) payload.gender = createForm.gender;
+      if (createForm.age_bracket) payload.age_bracket = createForm.age_bracket;
+      if (createForm.id_number) payload.id_number = createForm.id_number;
+      if (createForm.bio) payload.bio = createForm.bio;
+      if (createForm.county_id) payload.county_id = createForm.county_id;
+      if (createForm.constituency_id) payload.constituency_id = createForm.constituency_id;
+      if (createForm.ward_id) payload.ward_id = createForm.ward_id;
+
       const response = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createForm),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
@@ -194,7 +356,9 @@ export default function AdminUsersPage() {
 
       setSuccess('User created successfully');
       setShowCreateModal(false);
-      setCreateForm({ phone: '', full_name: '', email: '', role: ROLES.VOTER });
+      setCreateForm({ phone: '', full_name: '', email: '', role: ROLES.VOTER, gender: '', age_bracket: '', id_number: '', bio: '', county_id: '', constituency_id: '', ward_id: '' });
+      setConstituencies([]);
+      setWards([]);
       fetchUsers();
     } catch (err: any) {
       setError(err.message);
@@ -601,56 +765,174 @@ export default function AdminUsersPage() {
         {/* Create User Modal */}
         {showCreateModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
               <h3 className="text-lg font-semibold mb-4">Create New User</h3>
               <form onSubmit={handleCreateUser} className="space-y-4">
+                {/* Basic Info Section */}
+                <div className="border-b pb-4">
+                  <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Basic Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+                      <input
+                        type="tel"
+                        value={createForm.phone}
+                        onChange={(e) => setCreateForm(f => ({ ...f, phone: e.target.value }))}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        placeholder="0712345678"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                      <input
+                        type="text"
+                        value={createForm.full_name}
+                        onChange={(e) => setCreateForm(f => ({ ...f, full_name: e.target.value }))}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        placeholder="John Doe"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={createForm.email}
+                        onChange={(e) => setCreateForm(f => ({ ...f, email: e.target.value }))}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        placeholder="john@example.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">ID Number</label>
+                      <input
+                        type="text"
+                        value={createForm.id_number}
+                        onChange={(e) => setCreateForm(f => ({ ...f, id_number: e.target.value }))}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        placeholder="National ID number"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Role & Demographics Section */}
+                <div className="border-b pb-4">
+                  <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Role & Demographics</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                      <select
+                        value={createForm.role}
+                        onChange={(e) => setCreateForm(f => ({ ...f, role: e.target.value }))}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      >
+                        {availableRoles.map((role) => (
+                          <option key={role} value={role}>
+                            {ROLE_INFO[role as Role]?.label || role}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">{ROLE_INFO[createForm.role as Role]?.description}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                      <select
+                        value={createForm.gender}
+                        onChange={(e) => setCreateForm(f => ({ ...f, gender: e.target.value }))}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      >
+                        <option value="">Select gender</option>
+                        {GENDER_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Age Bracket</label>
+                      <select
+                        value={createForm.age_bracket}
+                        onChange={(e) => setCreateForm(f => ({ ...f, age_bracket: e.target.value }))}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      >
+                        <option value="">Select age bracket</option>
+                        {AGE_BRACKET_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Location Section */}
+                <div className="border-b pb-4">
+                  <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Location</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">County</label>
+                      <select
+                        value={createForm.county_id}
+                        onChange={(e) => {
+                          setCreateForm(f => ({ ...f, county_id: e.target.value, constituency_id: '', ward_id: '' }));
+                          fetchConstituencies(e.target.value, 'create');
+                          setWards([]);
+                        }}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      >
+                        <option value="">Select county</option>
+                        {counties.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Constituency</label>
+                      <select
+                        value={createForm.constituency_id}
+                        onChange={(e) => {
+                          setCreateForm(f => ({ ...f, constituency_id: e.target.value, ward_id: '' }));
+                          fetchWards(e.target.value, 'create');
+                        }}
+                        disabled={!createForm.county_id}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100"
+                      >
+                        <option value="">Select constituency</option>
+                        {constituencies.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Ward</label>
+                      <select
+                        value={createForm.ward_id}
+                        onChange={(e) => setCreateForm(f => ({ ...f, ward_id: e.target.value }))}
+                        disabled={!createForm.constituency_id}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100"
+                      >
+                        <option value="">Select ward</option>
+                        {wards.map((w) => (
+                          <option key={w.id} value={w.id}>{w.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bio Section */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-                  <input
-                    type="tel"
-                    value={createForm.phone}
-                    onChange={(e) => setCreateForm(f => ({ ...f, phone: e.target.value }))}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bio</label>
+                  <textarea
+                    value={createForm.bio}
+                    onChange={(e) => setCreateForm(f => ({ ...f, bio: e.target.value }))}
+                    rows={3}
                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    placeholder="0712345678"
-                    required
+                    placeholder="Brief description about the user..."
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    value={createForm.full_name}
-                    onChange={(e) => setCreateForm(f => ({ ...f, full_name: e.target.value }))}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    placeholder="John Doe"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={createForm.email}
-                    onChange={(e) => setCreateForm(f => ({ ...f, email: e.target.value }))}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    placeholder="john@example.com"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                  <select
-                    value={createForm.role}
-                    onChange={(e) => setCreateForm(f => ({ ...f, role: e.target.value }))}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  >
-                    {availableRoles.map((role) => (
-                      <option key={role} value={role}>
-                        {ROLE_INFO[role as Role]?.label || role}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex justify-end gap-3 mt-6">
+
+                <div className="flex justify-end gap-3 pt-2">
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}
@@ -673,47 +955,197 @@ export default function AdminUsersPage() {
         {/* Edit User Modal */}
         {editingUser && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-              <h3 className="text-lg font-semibold mb-4">Edit User: {editingUser.full_name}</h3>
+            <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Edit User: {editingUser.full_name}</h3>
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getRoleBadgeColor(editingUser.role)}`}>
+                  {ROLE_INFO[editingUser.role as Role]?.label || editingUser.role}
+                </span>
+              </div>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  const formData = new FormData(e.currentTarget);
-                  handleUpdateUser(editingUser.id, {
-                    full_name: formData.get('full_name') as string,
-                    email: formData.get('email') as string || null,
-                  } as Partial<User>);
+                  const updates: Record<string, any> = {
+                    full_name: editForm.full_name,
+                    email: editForm.email || null,
+                    is_verified: editForm.is_verified,
+                  };
+                  if (editForm.gender) updates.gender = editForm.gender;
+                  if (editForm.age_bracket) updates.age_bracket = editForm.age_bracket;
+                  if (editForm.id_number) updates.id_number = editForm.id_number;
+                  updates.bio = editForm.bio || null;
+                  if (editForm.county_id) updates.county_id = editForm.county_id;
+                  if (editForm.constituency_id) updates.constituency_id = editForm.constituency_id;
+                  if (editForm.ward_id) updates.ward_id = editForm.ward_id;
+                  handleUpdateUser(editingUser.id, updates as Partial<User>);
                 }}
                 className="space-y-4"
               >
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                  <input
-                    type="tel"
-                    value={editingUser.phone}
-                    disabled
-                    className="w-full px-4 py-2 border rounded-lg bg-gray-100 text-gray-500"
-                  />
+                {/* Basic Info Section */}
+                <div className="border-b pb-4">
+                  <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Basic Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                      <input
+                        type="tel"
+                        value={editingUser.phone}
+                        disabled
+                        className="w-full px-4 py-2 border rounded-lg bg-gray-100 text-gray-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                      <input
+                        type="text"
+                        value={editForm.full_name}
+                        onChange={(e) => setEditForm(f => ({ ...f, full_name: e.target.value }))}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={editForm.email}
+                        onChange={(e) => setEditForm(f => ({ ...f, email: e.target.value }))}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">ID Number</label>
+                      <input
+                        type="text"
+                        value={editForm.id_number}
+                        onChange={(e) => setEditForm(f => ({ ...f, id_number: e.target.value }))}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        placeholder="National ID number"
+                      />
+                    </div>
+                  </div>
                 </div>
+
+                {/* Demographics Section */}
+                <div className="border-b pb-4">
+                  <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Demographics</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                      <select
+                        value={editForm.gender}
+                        onChange={(e) => setEditForm(f => ({ ...f, gender: e.target.value }))}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      >
+                        <option value="">Select gender</option>
+                        {GENDER_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Age Bracket</label>
+                      <select
+                        value={editForm.age_bracket}
+                        onChange={(e) => setEditForm(f => ({ ...f, age_bracket: e.target.value }))}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      >
+                        <option value="">Select age bracket</option>
+                        {AGE_BRACKET_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center pt-6">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editForm.is_verified}
+                          onChange={(e) => setEditForm(f => ({ ...f, is_verified: e.target.checked }))}
+                          className="h-4 w-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                        />
+                        <span className="text-sm font-medium text-gray-700">Phone Verified</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Location Section */}
+                <div className="border-b pb-4">
+                  <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Location</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">County</label>
+                      <select
+                        value={editForm.county_id}
+                        onChange={(e) => {
+                          setEditForm(f => ({ ...f, county_id: e.target.value, constituency_id: '', ward_id: '' }));
+                          fetchConstituencies(e.target.value, 'edit');
+                          setEditWards([]);
+                        }}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      >
+                        <option value="">Select county</option>
+                        {counties.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Constituency</label>
+                      <select
+                        value={editForm.constituency_id}
+                        onChange={(e) => {
+                          setEditForm(f => ({ ...f, constituency_id: e.target.value, ward_id: '' }));
+                          fetchWards(e.target.value, 'edit');
+                        }}
+                        disabled={!editForm.county_id}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100"
+                      >
+                        <option value="">Select constituency</option>
+                        {editConstituencies.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Ward</label>
+                      <select
+                        value={editForm.ward_id}
+                        onChange={(e) => setEditForm(f => ({ ...f, ward_id: e.target.value }))}
+                        disabled={!editForm.constituency_id}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100"
+                      >
+                        <option value="">Select ward</option>
+                        {editWards.map((w) => (
+                          <option key={w.id} value={w.id}>{w.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bio Section */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    name="full_name"
-                    defaultValue={editingUser.full_name}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bio</label>
+                  <textarea
+                    value={editForm.bio}
+                    onChange={(e) => setEditForm(f => ({ ...f, bio: e.target.value }))}
+                    rows={3}
                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    placeholder="Brief description about the user..."
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    name="email"
-                    defaultValue={editingUser.email || ''}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  />
+
+                {/* Meta Info */}
+                <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
+                  <div className="flex gap-4">
+                    <span>Joined: {new Date(editingUser.created_at).toLocaleDateString()}</span>
+                    <span>Last Login: {editingUser.last_login ? new Date(editingUser.last_login).toLocaleDateString() : 'Never'}</span>
+                    <span>Status: {editingUser.is_active ? 'Active' : 'Inactive'}</span>
+                  </div>
                 </div>
-                <div className="flex justify-end gap-3 mt-6">
+
+                <div className="flex justify-end gap-3 pt-2">
                   <button
                     type="button"
                     onClick={() => setEditingUser(null)}

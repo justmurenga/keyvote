@@ -40,9 +40,13 @@ export async function GET(request: NextRequest) {
         role,
         gender,
         age_bracket,
+        bio,
         is_verified,
         is_active,
         profile_photo_url,
+        county_id,
+        constituency_id,
+        ward_id,
         county:counties(id, name),
         constituency:constituencies(id, name),
         ward:wards(id, name),
@@ -119,7 +123,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { phone, full_name, email, role, county_id, constituency_id, ward_id } = body;
+    const { phone, full_name, email, role, county_id, constituency_id, ward_id, gender, age_bracket, id_number, bio } = body;
 
     if (!phone || !full_name) {
       return NextResponse.json(
@@ -161,6 +165,10 @@ export async function POST(request: NextRequest) {
         county_id,
         constituency_id,
         ward_id,
+        gender,
+        age_bracket,
+        id_number,
+        bio,
         is_active: true,
       })
       .select()

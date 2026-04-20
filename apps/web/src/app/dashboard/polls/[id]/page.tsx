@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   ArrowLeft, 
@@ -85,8 +85,8 @@ const GENDER_LABELS: Record<string, string> = {
   prefer_not_to_say: 'Not Specified',
 };
 
-export default function PollResultsPage({ params }: { params: { id: string } }) {
-  const resolvedParams = params;
+export default function PollResultsPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
   const router = useRouter();
   const [poll, setPoll] = useState<PollDetails | null>(null);
   const [candidateResults, setCandidateResults] = useState<CandidateResult[]>([]);

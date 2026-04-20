@@ -14,7 +14,8 @@ export async function GET() {
     if (error) throw error;
 
     // Only expose safe public fields
-    const { supportPhone, ussdCode, supportEmail, siteName } = data?.value || {};
+    const settings = (data?.value ?? {}) as Record<string, string>;
+    const { supportPhone, ussdCode, supportEmail, siteName } = settings;
 
     return NextResponse.json({
       supportPhone: supportPhone || '+254 700 000 000',

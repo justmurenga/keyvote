@@ -18,6 +18,8 @@ import {
   PieChart,
   MessageSquare,
   DollarSign,
+  KeyRound,
+  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/use-permissions';
@@ -32,6 +34,8 @@ interface AdminNavItem {
 const adminNavItems: AdminNavItem[] = [
   { href: '/dashboard/admin', label: 'Overview', icon: LayoutDashboard },
   { href: '/dashboard/admin/users', label: 'Users', icon: Users, permission: 'users:view' },
+  { href: '/dashboard/admin/roles', label: 'Role Management', icon: KeyRound, permission: 'users:view' },
+  { href: '/dashboard/admin/roles/audit', label: 'Role Audit Log', icon: FileText, permission: 'users:view' },
   { href: '/dashboard/admin/polls', label: 'Polls', icon: ClipboardList, permission: 'polls:edit' },
   { href: '/dashboard/admin/poll-analytics', label: 'Poll Analytics', icon: PieChart, permission: 'polls:edit' },
   { href: '/dashboard/admin/candidates', label: 'Candidates', icon: UserCheck, permission: 'candidates:edit' },

@@ -9,10 +9,12 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const navLinks = [
-  { href: '/candidates', label: 'Candidates' },
-  { href: '/polls', label: 'Polls' },
-  { href: '/results', label: 'Results' },
-  { href: '/about', label: 'About' },
+  { href: '/candidates', label: 'Candidates', authRequired: true },
+  { href: '/polls', label: 'Polls', authRequired: true },
+  { href: '/results', label: 'Results', authRequired: true },
+  { href: '/about', label: 'About', authRequired: false },
+  { href: '/dashboard/candidate', label: 'Candidate Portal', authRequired: true },
+  { href: '/dashboard/party', label: 'Party Portal', authRequired: true },
 ];
 
 interface SiteHeaderProps {

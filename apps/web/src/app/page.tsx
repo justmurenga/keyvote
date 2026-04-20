@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Users, BarChart3, Bell, Shield, Smartphone, Vote, ArrowRight, TrendingUp } from 'lucide-react';
 import { SiteHeader, SiteFooter } from '@/components/layout';
+import { ChatWidget } from '@/components/chat/chat-widget';
 import { createClient } from '@/lib/supabase/server';
 
 // Featured candidates component
@@ -282,6 +283,7 @@ export default async function HomePage() {
         </div>
       </section>
 
+      <ChatWidget />
       <SiteFooter />
     </div>
   );

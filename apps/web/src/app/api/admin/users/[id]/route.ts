@@ -103,7 +103,11 @@ export async function PUT(
       county_id, 
       constituency_id, 
       ward_id,
-      is_verified
+      is_verified,
+      gender,
+      age_bracket,
+      id_number,
+      bio
     } = body;
 
     // Get target user's current role
@@ -160,6 +164,10 @@ export async function PUT(
     if (constituency_id !== undefined) updateData.constituency_id = constituency_id;
     if (ward_id !== undefined) updateData.ward_id = ward_id;
     if (is_verified !== undefined) updateData.is_verified = is_verified;
+    if (gender !== undefined) updateData.gender = gender;
+    if (age_bracket !== undefined) updateData.age_bracket = age_bracket;
+    if (id_number !== undefined) updateData.id_number = id_number;
+    if (bio !== undefined) updateData.bio = bio;
 
     const { data: user, error } = await (supabase as any)
       .from('users')

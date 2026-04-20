@@ -31,11 +31,12 @@ export async function PUT(req: NextRequest) {
     const supabase = createAdminClient();
 
     // Update each settings category
-    const updates = Object.entries(body).map(([key, value]) =>
-      supabase
+    const updates = Object.entries(body).map(([key, value]) => {
+      const row = { key, value: value as any, updated_at: new Date().toISOString() };
+      return supabase
         .from('system_settings')
-        .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-    );
+        .upsert(row, { onConflict: 'key' });
+    });
 
     const results = await Promise.all(updates);
     const failed = results.find((r) => r.error);

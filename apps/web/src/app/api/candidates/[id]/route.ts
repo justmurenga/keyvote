@@ -12,11 +12,12 @@ const POSITION_LABELS: Record<string, string> = {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
-    const candidateId = params.id;
+    const { id } = await params;
+    const candidateId = id;
 
     // Fetch candidate with all related data
     const { data: candidate, error } = await supabase

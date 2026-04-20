@@ -22,10 +22,12 @@ const publicRoutes = [
   '/api/regions/constituencies',
   '/api/regions/wards',
   '/api/regions/polling-stations',
-  '/candidates',
-  '/polls',
-  '/results',
+  '/api/settings',
   '/about',
+  '/faq',
+  '/privacy',
+  '/terms',
+  '/contact',
   '/agents/accept', // Agent invitation acceptance pages
   '/api/agents/invitation', // Public invitation details API
   '/dashboard', // Keep public for now
