@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -106,14 +107,39 @@ export function DashboardNav({ role }: DashboardNavProps) {
         })}
       </nav>
 
-      <div className="p-4 border-t">
-        <div className="rounded-lg bg-primary/10 p-4">
-          <p className="text-sm font-medium">Need help?</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            USSD: *123# | WhatsApp: +254 700 000 000
-          </p>
-        </div>
-      </div>
+      <SidebarHelpInfo />
     </aside>
+  );
+}
+
+function SidebarHelpInfo() {
+  const [contactInfo, setContactInfo] = useState({
+    ussdCode: '*123#',
+    supportPhone: '+254 700 000 000',
+    supportEmail: 'support@myvote.co.ke',
+  });
+
+  useEffect(() => {
+    fetch('/api/settings/public')
+      .then((res) => res.json())
+      .then((data) => {
+        setContactInfo({
+          ussdCode: data.ussdCode || '*123#',
+          supportPhone: data.supportPhone || '+254 700 000 000',
+          supportEmail: data.supportEmail || 'support@myvote.co.ke',
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  return (
+    <div className="p-4 border-t">
+      <div className="rounded-lg bg-primary/10 p-4">
+        <p className="text-sm font-medium">Need help?</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          USSD: {contactInfo.ussdCode} | WhatsApp: {contactInfo.supportPhone}
+        </p>
+      </div>
+    </div>
   );
 }

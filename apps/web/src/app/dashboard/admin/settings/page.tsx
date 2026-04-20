@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +31,7 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(true);
 
   // General settings
   const [generalSettings, setGeneralSettings] = useState({
@@ -84,8 +85,17 @@ export default function AdminSettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // In a real implementation, this would save to the database
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const res = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          general: generalSettings,
+          security: securitySettings,
+          notifications: notificationSettings,
+          payments: paymentSettings,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
       setSuccess('Settings saved successfully!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
@@ -94,6 +104,26 @@ export default function AdminSettingsPage() {
       setSaving(false);
     }
   };
+
+  // Load settings from database on mount
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const res = await fetch('/api/admin/settings');
+        if (!res.ok) throw new Error('Failed to load');
+        const data = await res.json();
+        if (data.general) setGeneralSettings(prev => ({ ...prev, ...data.general }));
+        if (data.security) setSecuritySettings(prev => ({ ...prev, ...data.security }));
+        if (data.notifications) setNotificationSettings(prev => ({ ...prev, ...data.notifications }));
+        if (data.payments) setPaymentSettings(prev => ({ ...prev, ...data.payments }));
+      } catch (error) {
+        console.error('Failed to load settings:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadSettings();
+  }, []);
 
   const handleRefreshViews = async () => {
     setRefreshing(true);
