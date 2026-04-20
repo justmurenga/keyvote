@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { User, AuthChangeEvent, Session } from '@supabase/supabase-js';
@@ -28,18 +28,36 @@ interface UseAuthReturn {
   refresh: () => Promise<void>;
 }
 
+// Module-level cache so all hook instances share the same data
+let cachedProfile: UserProfile | null = null;
+let cachedUser: User | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL = 30_000; // 30 seconds
+
 export function useAuth(): UseAuthReturn {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(cachedUser);
+  const [profile, setProfile] = useState<UserProfile | null>(cachedProfile);
+  const [isLoading, setIsLoading] = useState(!cachedProfile && !cachedUser);
   const router = useRouter();
   const supabase = createClient();
+  const fetchingRef = useRef(false);
 
-  const fetchUserAndProfile = useCallback(async () => {
+  const fetchUserAndProfile = useCallback(async (force = false) => {
+    // Skip if already fetching or cache is fresh
+    if (fetchingRef.current) return;
+    if (!force && cachedProfile && (Date.now() - cacheTimestamp < CACHE_TTL)) {
+      setUser(cachedUser);
+      setProfile(cachedProfile);
+      setIsLoading(false);
+      return;
+    }
+
+    fetchingRef.current = true;
     try {
       // First try Supabase auth
       const { data: { user: authUser } } = await supabase.auth.getUser();
       setUser(authUser);
+      cachedUser = authUser;
 
       if (authUser) {
         const { data: profileData } = await supabase
@@ -47,7 +65,10 @@ export function useAuth(): UseAuthReturn {
           .select('id, phone, email, full_name, role, is_verified, profile_photo_url, gender, age_bracket, bio, polling_station_id')
           .eq('id', authUser.id)
           .single();
-        setProfile(profileData as UserProfile | null);
+        const p = profileData as UserProfile | null;
+        setProfile(p);
+        cachedProfile = p;
+        cacheTimestamp = Date.now();
       } else {
         // Fallback: check custom session via /api/auth/me (for OTP login)
         try {
@@ -55,7 +76,7 @@ export function useAuth(): UseAuthReturn {
           if (res.ok) {
             const data = await res.json();
             if (data.user) {
-              setProfile({
+              const p: UserProfile = {
                 id: data.user.id,
                 phone: data.user.phone,
                 email: data.user.email,
@@ -67,23 +88,32 @@ export function useAuth(): UseAuthReturn {
                 age_bracket: data.user.age_bracket ?? null,
                 bio: data.user.bio ?? null,
                 polling_station_id: data.user.polling_station_id ?? null,
-              });
+              };
+              setProfile(p);
+              cachedProfile = p;
+              cacheTimestamp = Date.now();
             } else {
               setProfile(null);
+              cachedProfile = null;
             }
           } else {
             setProfile(null);
+            cachedProfile = null;
           }
         } catch {
           setProfile(null);
+          cachedProfile = null;
         }
       }
     } catch (error) {
       console.error('Error fetching user:', error);
       setUser(null);
       setProfile(null);
+      cachedUser = null;
+      cachedProfile = null;
     } finally {
       setIsLoading(false);
+      fetchingRef.current = false;
     }
   }, [supabase]);
 

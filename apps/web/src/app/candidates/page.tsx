@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Search, ChevronLeft, ChevronRight, Loader2, Users } from 'lucide-react';
@@ -27,7 +27,7 @@ interface CandidatesResponse {
   totalPages: number;
 }
 
-export default function CandidatesPage() {
+function CandidatesPageContent() {
   const searchParams = useSearchParams();
   
   const [candidates, setCandidates] = useState<CandidateCardProps[]>([]);
@@ -195,5 +195,13 @@ export default function CandidatesPage() {
 
       <SiteFooter />
     </div>
+  );
+}
+
+export default function CandidatesPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
+      <CandidatesPageContent />
+    </Suspense>
   );
 }

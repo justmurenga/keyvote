@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Vote, Menu, X } from 'lucide-react';
+import { Vote, Menu, X, Sun, Moon } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +22,7 @@ interface SiteHeaderProps {
 export function SiteHeader({ transparent = false }: SiteHeaderProps) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   return (
     <header 
@@ -55,6 +57,17 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
 
         {/* Auth Buttons */}
         <div className="hidden md:flex items-center space-x-4">
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="relative p-2 rounded-md hover:bg-muted transition-colors"
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? (
+              <Sun className="h-5 w-5" />
+            ) : (
+              <Moon className="h-5 w-5" />
+            )}
+          </button>
           <Link href="/auth/login">
             <Button variant="ghost">Log In</Button>
           </Link>

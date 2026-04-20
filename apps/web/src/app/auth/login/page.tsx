@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Vote, Phone, Mail, ArrowLeft, Loader2 } from 'lucide-react';
@@ -11,7 +11,7 @@ import { createClient } from '@/lib/supabase/client';
 type Step = 'identifier' | 'otp';
 type AuthMethod = 'phone' | 'email';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const [step, setStep] = useState<Step>('identifier');
   const [authMethod, setAuthMethod] = useState<AuthMethod>('email');
   const [phone, setPhone] = useState('');
@@ -470,5 +470,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -16,6 +17,7 @@ import {
   Shield,
   PieChart,
   MessageSquare,
+  DollarSign,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/use-permissions';
@@ -37,7 +39,9 @@ const adminNavItems: AdminNavItem[] = [
   { href: '/dashboard/admin/regions', label: 'Electoral Regions', icon: MapPin, permission: 'regions:view' },
   { href: '/dashboard/admin/results', label: 'Election Results', icon: Vote, permission: 'results:verify' },
   { href: '/dashboard/admin/wallets', label: 'Wallets', icon: Wallet, permission: 'wallet:view_all' },
+  { href: '/dashboard/admin/billing', label: 'Billing & Pricing', icon: DollarSign, permission: 'settings:system' },
   { href: '/dashboard/admin/sms', label: 'SMS Management', icon: MessageSquare, permission: 'settings:system' },
+  { href: '/dashboard/admin/pricing', label: 'Service Pricing', icon: DollarSign, permission: 'settings:system' },
   { href: '/dashboard/admin/settings', label: 'System Settings', icon: Settings, permission: 'settings:system' },
 ];
 
@@ -47,17 +51,50 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { can, isAdmin, loading } = usePermissions();
+  const { can, isAdmin, loading, user } = usePermissions();
+  const [ready, setReady] = useState(false);
+  const [cachedIsAdmin, setCachedIsAdmin] = useState<boolean | null>(null);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
+  // On mount, check sessionStorage for cached admin status to prevent flash
+  useEffect(() => {
+    try {
+      const cached = sessionStorage.getItem('myvote-is-admin');
+      if (cached === 'true') setCachedIsAdmin(true);
+    } catch {}
+  }, []);
+
+  // Wait for auth to fully resolve before showing any content
+  useEffect(() => {
+    if (!loading && user) {
+      const adminStatus = isAdmin();
+      setCachedIsAdmin(adminStatus);
+      try { sessionStorage.setItem('myvote-is-admin', String(adminStatus)); } catch {}
+      // Small delay to ensure profile is fully hydrated
+      const timer = setTimeout(() => setReady(true), 100);
+      return () => clearTimeout(timer);
+    } else if (!loading && !user) {
+      setReady(true);
+    }
+  }, [loading, user]);
+
+  // Show loading while auth resolves - use cached status to avoid showing Access Denied flash
+  if (loading || !ready) {
+    // If we have cached admin status, show the layout shell immediately
+    if (cachedIsAdmin) {
+      // Fall through to render layout with loading content
+    } else {
+      return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="flex flex-col items-center gap-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            <p className="text-sm text-muted-foreground">Loading admin panel...</p>
+          </div>
+        </div>
+      );
+    }
   }
 
-  if (!isAdmin()) {
+  if (ready && !isAdmin()) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <Shield className="h-16 w-16 text-muted-foreground" />

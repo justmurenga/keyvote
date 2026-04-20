@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#16a34a"/>
+      <stop offset="100%" style="stop-color:#15803d"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="200" fill="url(#bg)"/>
+  <!-- Ballot slot -->
+  <rect x="312" y="140" width="400" height="60" rx="30" fill="#bbf7d0" opacity="0.5"/>
+  <!-- Ballot box -->
+  <rect x="212" y="220" width="600" height="540" rx="60" fill="#166534"/>
+  <!-- Checkmark -->
+  <polyline points="340,500 440,600 684,340" fill="none" stroke="#ffffff" stroke-width="80" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Brand text -->
+  <text x="512" y="880" font-family="Arial, sans-serif" font-size="100" font-weight="800" fill="#bbf7d0" text-anchor="middle" letter-spacing="4">myVote</text>
+  <text x="512" y="940" font-family="Arial, sans-serif" font-size="50" font-weight="500" fill="#bbf7d0" text-anchor="middle" letter-spacing="8" opacity="0.7">KENYA</text>
+</svg>

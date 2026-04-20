@@ -284,7 +284,7 @@ export function PollingStationSelector({ onSelect, selectedId, disabled }: Polli
             value={selectedCounty}
             onChange={(e) => handleCountyChange(e.target.value)}
             disabled={disabled || loadingCounties}
-            className="w-full px-4 py-3 pr-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <option value="">
               {loadingCounties ? 'Loading counties...' : 'Select your county'}
@@ -296,15 +296,15 @@ export function PollingStationSelector({ onSelect, selectedId, disabled }: Polli
               </option>
             ))}
           </select>
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-            {loadingCounties ? (
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            ) : selectedCounty ? (
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            )}
-          </div>
+          {(loadingCounties || selectedCounty) && (
+            <div className="absolute right-10 top-1/2 -translate-y-1/2 pointer-events-none">
+              {loadingCounties ? (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              ) : selectedCounty ? (
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+              ) : null}
+            </div>
+          )}
         </div>
         {counties.length > 0 && !selectedCounty && (
           <p className="mt-1 text-xs text-muted-foreground">{counties.length} counties available</p>
@@ -323,7 +323,7 @@ export function PollingStationSelector({ onSelect, selectedId, disabled }: Polli
               value={selectedConstituency}
               onChange={(e) => handleConstituencyChange(e.target.value)}
               disabled={disabled || loadingConstituencies}
-              className="w-full px-4 py-3 pr-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">
                 {loadingConstituencies ? 'Loading constituencies...' : 'Select your constituency'}
@@ -335,15 +335,15 @@ export function PollingStationSelector({ onSelect, selectedId, disabled }: Polli
                 </option>
               ))}
             </select>
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-              {loadingConstituencies ? (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              ) : selectedConstituency ? (
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              )}
-            </div>
+            {(loadingConstituencies || selectedConstituency) && (
+              <div className="absolute right-10 top-1/2 -translate-y-1/2 pointer-events-none">
+                {loadingConstituencies ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : selectedConstituency ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                ) : null}
+              </div>
+            )}
           </div>
           {constituencies.length > 0 && !selectedConstituency && (
             <p className="mt-1 text-xs text-muted-foreground">
@@ -365,7 +365,7 @@ export function PollingStationSelector({ onSelect, selectedId, disabled }: Polli
               value={selectedWard}
               onChange={(e) => handleWardChange(e.target.value)}
               disabled={disabled || loadingWards}
-              className="w-full px-4 py-3 pr-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">
                 {loadingWards ? 'Loading wards...' : 'Select your ward'}
@@ -377,15 +377,15 @@ export function PollingStationSelector({ onSelect, selectedId, disabled }: Polli
                 </option>
               ))}
             </select>
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-              {loadingWards ? (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              ) : selectedWard ? (
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              )}
-            </div>
+            {(loadingWards || selectedWard) && (
+              <div className="absolute right-10 top-1/2 -translate-y-1/2 pointer-events-none">
+                {loadingWards ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : selectedWard ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                ) : null}
+              </div>
+            )}
           </div>
           {wards.length > 0 && !selectedWard && (
             <p className="mt-1 text-xs text-muted-foreground">

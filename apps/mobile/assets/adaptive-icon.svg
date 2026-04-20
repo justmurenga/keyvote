@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Android adaptive icon foreground (no background, transparent) -->
+  <!-- Ballot slot -->
+  <rect x="312" y="200" width="400" height="60" rx="30" fill="#ffffff" opacity="0.4"/>
+  <!-- Ballot box -->
+  <rect x="212" y="280" width="600" height="480" rx="60" fill="#166534"/>
+  <!-- Checkmark -->
+  <polyline points="340,520 440,620 684,360" fill="none" stroke="#ffffff" stroke-width="80" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -17,6 +17,11 @@ const publicRoutes = [
   '/api/candidates',
   '/api/polls',
   '/api/results',
+  '/api/regions',        // Public region data for registration
+  '/api/regions/counties',
+  '/api/regions/constituencies',
+  '/api/regions/wards',
+  '/api/regions/polling-stations',
   '/candidates',
   '/polls',
   '/results',

@@ -1,16 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveUserId } from '@/lib/auth';
 import { getOrCreateWallet, chargeForService } from '@/lib/wallet';
 
-// Service pricing configuration
-const SERVICE_PRICING: Record<string, { amount: number; description: string }> = {
+// Default service pricing (fallback if not configured in system_settings)
+const DEFAULT_SERVICE_PRICING: Record<string, { amount: number; description: string }> = {
   sms: { amount: 5, description: 'SMS Alert' },
   whatsapp: { amount: 3, description: 'WhatsApp Alert' },
   poll_view: { amount: 10, description: 'Poll Access' },
   result_view: { amount: 10, description: 'Election Results Access' },
   subscription: { amount: 100, description: 'Premium Subscription' },
 };
+
+// Load dynamic pricing from system_settings
+async function getServicePricing(): Promise<Record<string, { amount: number; description: string }>> {
+  try {
+    const adminClient = createAdminClient();
+    const { data: settings } = await adminClient
+      .from('system_settings')
+      .select('value')
+      .eq('key', 'billable_items')
+      .single();
+
+    if (settings?.value && Array.isArray(settings.value)) {
+      const pricing: Record<string, { amount: number; description: string }> = {};
+      for (const item of settings.value) {
+        if (item.is_active) {
+          pricing[item.id] = { amount: item.price, description: item.name };
+        }
+      }
+      return Object.keys(pricing).length > 0 ? pricing : DEFAULT_SERVICE_PRICING;
+    }
+  } catch {
+    // Fall through to default
+  }
+  return DEFAULT_SERVICE_PRICING;
+}
 
 /**
  * POST /api/wallet/charge - Charge wallet for a service
@@ -33,6 +59,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { serviceType, reference, customDescription } = body;
+
+    // Load dynamic pricing
+    const SERVICE_PRICING = await getServicePricing();
 
     // Validate service type
     if (!serviceType || !SERVICE_PRICING[serviceType]) {
@@ -110,6 +139,7 @@ export async function POST(request: NextRequest) {
  * GET /api/wallet/charge - Get service pricing
  */
 export async function GET() {
+  const SERVICE_PRICING = await getServicePricing();
   return NextResponse.json({
     success: true,
     pricing: Object.entries(SERVICE_PRICING).map(([type, info]) => ({
