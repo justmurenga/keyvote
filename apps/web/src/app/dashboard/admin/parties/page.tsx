@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,6 +36,66 @@ interface Party {
   candidate_count?: number;
 }
 
+interface FormData {
+  name: string;
+  abbreviation: string;
+  registration_number: string;
+  leader_name: string;
+  primary_color: string;
+}
+
+function PartyFormModal({ title, onSubmit, submitLabel, formData, setFormData, onClose, actionLoading }: {
+  title: string;
+  onSubmit: () => void;
+  submitLabel: string;
+  formData: FormData;
+  setFormData: React.Dispatch<React.SetStateAction<FormData>>;
+  onClose: () => void;
+  actionLoading: string | null;
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
+      <div className="fixed inset-x-4 top-[10%] z-50 mx-auto max-w-lg rounded-lg border bg-background shadow-lg">
+        <div className="p-6 space-y-4">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <div className="space-y-3">
+            <div>
+              <Label>Party Name *</Label>
+              <Input value={formData.name} onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))} placeholder="e.g., Orange Democratic Movement" />
+            </div>
+            <div>
+              <Label>Abbreviation *</Label>
+              <Input value={formData.abbreviation} onChange={(e) => setFormData(prev => ({ ...prev, abbreviation: e.target.value }))} placeholder="e.g., ODM" />
+            </div>
+            <div>
+              <Label>Registration Number</Label>
+              <Input value={formData.registration_number} onChange={(e) => setFormData(prev => ({ ...prev, registration_number: e.target.value }))} placeholder="ORPP registration number" />
+            </div>
+            <div>
+              <Label>Party Leader</Label>
+              <Input value={formData.leader_name} onChange={(e) => setFormData(prev => ({ ...prev, leader_name: e.target.value }))} placeholder="Leader full name" />
+            </div>
+            <div>
+              <Label>Primary Color</Label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={formData.primary_color} onChange={(e) => setFormData(prev => ({ ...prev, primary_color: e.target.value }))} className="h-10 w-10 rounded cursor-pointer" />
+                <Input value={formData.primary_color} onChange={(e) => setFormData(prev => ({ ...prev, primary_color: e.target.value }))} placeholder="#008000" className="flex-1" />
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button onClick={onSubmit} disabled={!formData.name || !formData.abbreviation || actionLoading !== null}>
+              {actionLoading ? 'Saving...' : submitLabel}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function AdminPartiesPage() {
   const [parties, setParties] = useState<Party[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +108,7 @@ export default function AdminPartiesPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     name: '',
     abbreviation: '',
     registration_number: '',
@@ -56,11 +116,14 @@ export default function AdminPartiesPage() {
     primary_color: '#008000',
   });
 
+  const searchRef = useRef(search);
+  searchRef.current = search;
+
   const fetchParties = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: page.toString(), limit: '20' });
-      if (search) params.set('search', search);
+      if (searchRef.current) params.set('search', searchRef.current);
       if (statusFilter) params.set('status', statusFilter);
 
       const res = await fetch(`/api/admin/parties?${params}`);
@@ -75,9 +138,17 @@ export default function AdminPartiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter]);
+  }, [page, statusFilter]);
 
   useEffect(() => { fetchParties(); }, [fetchParties]);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchParties();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const handleCreate = async () => {
     setActionLoading('create');
@@ -171,47 +242,7 @@ export default function AdminPartiesPage() {
     return <Badge variant="outline" className="text-xs">Unverified</Badge>;
   };
 
-  const PartyFormModal = ({ title, onSubmit, submitLabel }: { title: string; onSubmit: () => void; submitLabel: string }) => (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/50" onClick={() => { setShowCreateModal(false); setShowEditModal(false); }} />
-      <div className="fixed inset-x-4 top-[10%] z-50 mx-auto max-w-lg rounded-lg border bg-background shadow-lg">
-        <div className="p-6 space-y-4">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <div className="space-y-3">
-            <div>
-              <Label>Party Name *</Label>
-              <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g., Orange Democratic Movement" />
-            </div>
-            <div>
-              <Label>Abbreviation *</Label>
-              <Input value={formData.abbreviation} onChange={(e) => setFormData({ ...formData, abbreviation: e.target.value })} placeholder="e.g., ODM" />
-            </div>
-            <div>
-              <Label>Registration Number</Label>
-              <Input value={formData.registration_number} onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })} placeholder="ORPP registration number" />
-            </div>
-            <div>
-              <Label>Party Leader</Label>
-              <Input value={formData.leader_name} onChange={(e) => setFormData({ ...formData, leader_name: e.target.value })} placeholder="Leader full name" />
-            </div>
-            <div>
-              <Label>Primary Color</Label>
-              <div className="flex items-center gap-2">
-                <input type="color" value={formData.primary_color} onChange={(e) => setFormData({ ...formData, primary_color: e.target.value })} className="h-10 w-10 rounded cursor-pointer" />
-                <Input value={formData.primary_color} onChange={(e) => setFormData({ ...formData, primary_color: e.target.value })} placeholder="#008000" className="flex-1" />
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => { setShowCreateModal(false); setShowEditModal(false); }}>Cancel</Button>
-            <Button onClick={onSubmit} disabled={!formData.name || !formData.abbreviation || actionLoading !== null}>
-              {actionLoading ? 'Saving...' : submitLabel}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
+  const closeModals = useCallback(() => { setShowCreateModal(false); setShowEditModal(false); }, []);
 
   return (
     <PermissionGuard permission="parties:edit" fallback={
@@ -258,8 +289,17 @@ export default function AdminPartiesPage() {
         </Card>
 
         {/* Create/Edit Modals */}
-        {showCreateModal && <PartyFormModal title="Create Political Party" onSubmit={handleCreate} submitLabel="Create Party" />}
-        {showEditModal && <PartyFormModal title="Edit Political Party" onSubmit={handleUpdate} submitLabel="Save Changes" />}
+        {(showCreateModal || showEditModal) && (
+          <PartyFormModal
+            title={showCreateModal ? "Create Political Party" : "Edit Political Party"}
+            onSubmit={showCreateModal ? handleCreate : handleUpdate}
+            submitLabel={showCreateModal ? "Create Party" : "Save Changes"}
+            formData={formData}
+            setFormData={setFormData}
+            onClose={closeModals}
+            actionLoading={actionLoading}
+          />
+        )}
 
         {/* Parties Grid */}
         {loading ? (

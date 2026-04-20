@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,6 +67,9 @@ export default function AdminCandidatesPage() {
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  const searchRef = useRef(search);
+  searchRef.current = search;
+
   const fetchCandidates = useCallback(async () => {
     setLoading(true);
     try {
@@ -74,7 +77,7 @@ export default function AdminCandidatesPage() {
         page: page.toString(),
         limit: '20',
       });
-      if (search) params.set('search', search);
+      if (searchRef.current) params.set('search', searchRef.current);
       if (position) params.set('position', position);
       if (verification) params.set('verification', verification);
 
@@ -90,11 +93,19 @@ export default function AdminCandidatesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, position, verification]);
+  }, [page, position, verification]);
 
   useEffect(() => {
     fetchCandidates();
   }, [fetchCandidates]);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchCandidates();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const handleVerify = async (candidateId: string, verify: boolean) => {
     setActionLoading(candidateId);

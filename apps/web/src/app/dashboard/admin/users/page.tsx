@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { 
@@ -81,6 +81,9 @@ export default function AdminUsersPage() {
     role: ROLES.VOTER,
   });
 
+  const searchRef = useRef(search);
+  searchRef.current = search;
+
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
@@ -88,7 +91,7 @@ export default function AdminUsersPage() {
         page: page.toString(),
         limit: '20',
       });
-      if (search) params.set('search', search);
+      if (searchRef.current) params.set('search', searchRef.current);
       if (roleFilter !== 'all') params.set('role', roleFilter);
       if (statusFilter !== 'all') params.set('status', statusFilter);
 
@@ -109,7 +112,7 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, roleFilter, statusFilter]);
+  }, [page, roleFilter, statusFilter]);
 
   useEffect(() => {
     if (!authLoading && currentUser) {
