@@ -33,6 +33,7 @@ services:
     instance_size_slug: basic-xxs
     instance_count: 1
     http_port: 3000
+    run_command: node apps/web/server.js
     routes:
       - path: /
     envs:
