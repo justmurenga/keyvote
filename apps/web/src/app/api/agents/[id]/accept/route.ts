@@ -23,8 +23,8 @@ export async function POST(
 
     // Try to find agent by invitation token first, then by ID
     let agent;
-    const { data: byToken } = await adminClient
-      .from('agents')
+    const { data: byToken } = await (adminClient
+      .from('agents') as any)
       .select('*')
       .eq('invitation_token', id)
       .single();
@@ -66,8 +66,8 @@ export async function POST(
     }
 
     // Accept the invitation
-    const { data: updated, error: updateError } = await adminClient
-      .from('agents')
+    const { data: updated, error: updateError } = await (adminClient
+      .from('agents') as any)
       .update({
         user_id: userId,
         status: 'active',
@@ -88,8 +88,8 @@ export async function POST(
     }
 
     // Promote user role to agent if currently a voter
-    await adminClient
-      .from('users')
+    await (adminClient
+      .from('users') as any)
       .update({ role: 'agent', updated_at: new Date().toISOString() })
       .eq('id', userId)
       .eq('role', 'voter');

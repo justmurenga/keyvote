@@ -1,21 +1,13 @@
 import AfricasTalking from 'africastalking';
 
-// Check if we're in dev mode without credentials
-const isDevelopment = process.env.NODE_ENV === 'development';
 const apiKey = process.env.AT_API_KEY;
 const username = process.env.AT_USERNAME;
-// Check for real credentials (not placeholder values)
-const hasCredentials = apiKey && 
-                       username && 
-                       !apiKey.includes('your-') && 
-                       username !== 'sandbox' &&
-                       username !== 'your-africastalking-username';
 
-// Initialize Africa's Talking (only if credentials exist)
-const africastalking = hasCredentials 
+// Initialize Africa's Talking
+const africastalking = apiKey && username
   ? AfricasTalking({
-      apiKey: apiKey!,
-      username: username!,
+      apiKey,
+      username,
     })
   : null;
 
@@ -64,17 +56,6 @@ export async function sendSMS(options: SendSMSOptions): Promise<SMSResponse> {
     const recipients = Array.isArray(options.to) 
       ? options.to.map(normalizePhoneNumber) 
       : [normalizePhoneNumber(options.to)];
-
-    // DEV MODE: Skip actual SMS sending if no credentials
-    if (isDevelopment && !hasCredentials) {
-      console.log(`[DEV MODE] SMS would be sent to ${recipients.join(', ')}`);
-      console.log(`[DEV MODE] Message: ${options.message}`);
-      return {
-        success: true,
-        messageId: `dev-${Date.now()}`,
-        cost: 'KES 0.00',
-      };
-    }
 
     if (!sms) {
       return {

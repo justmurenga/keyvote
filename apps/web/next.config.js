@@ -3,6 +3,13 @@ const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
   transpilePackages: ['@myvote/database', '@myvote/shared'],
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // @supabase/postgrest-js imports @supabase/node-fetch which is Node-only
+      config.resolve.alias['@supabase/node-fetch'] = false;
+    }
+    return config;
+  },
   images: {
     remotePatterns: [
       {

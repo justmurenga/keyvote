@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Shield,
   PieChart,
+  MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/use-permissions';
@@ -36,6 +37,7 @@ const adminNavItems: AdminNavItem[] = [
   { href: '/dashboard/admin/regions', label: 'Electoral Regions', icon: MapPin, permission: 'regions:view' },
   { href: '/dashboard/admin/results', label: 'Election Results', icon: Vote, permission: 'results:verify' },
   { href: '/dashboard/admin/wallets', label: 'Wallets', icon: Wallet, permission: 'wallet:view_all' },
+  { href: '/dashboard/admin/sms', label: 'SMS Management', icon: MessageSquare, permission: 'settings:system' },
   { href: '/dashboard/admin/settings', label: 'System Settings', icon: Settings, permission: 'settings:system' },
 ];
 

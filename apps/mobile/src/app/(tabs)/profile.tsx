@@ -5,13 +5,14 @@ import {
   StyleSheet,
   SafeAreaView,
   ScrollView,
-  TouchableOpacity,
+  Pressable,
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/stores/auth-store';
+import { useThemeStore } from '@/stores/theme-store';
 import { Avatar, Badge, Card, Button } from '@/components/ui';
 import { POSITION_LABELS, GENDER_LABELS } from '@/constants';
 import { FontSize, Spacing, BorderRadius } from '@/constants/theme';
@@ -57,6 +58,15 @@ export default function ProfileScreen() {
     );
   }
 
+  const themeMode = useThemeStore((s) => s.mode);
+  const setThemeMode = useThemeStore((s) => s.setMode);
+
+  const themeOptions: { label: string; value: 'light' | 'dark' | 'system'; icon: string }[] = [
+    { label: 'Light', value: 'light', icon: 'sunny-outline' },
+    { label: 'Dark', value: 'dark', icon: 'moon-outline' },
+    { label: 'System', value: 'system', icon: 'phone-portrait-outline' },
+  ];
+
   const menuSections = [
     {
       title: 'Account',
@@ -78,7 +88,6 @@ export default function ProfileScreen() {
       title: 'Settings',
       items: [
         { icon: 'notifications-outline', label: 'Notifications', route: '' },
-        { icon: 'moon-outline', label: 'Appearance', route: '' },
         { icon: 'help-circle-outline', label: 'Help & Support', route: '' },
         { icon: 'document-text-outline', label: 'Terms & Privacy', route: '' },
       ],
@@ -139,6 +148,38 @@ export default function ProfileScreen() {
         </View>
 
         {/* Menu Sections */}
+        {/* Theme Switcher */}
+        <View style={styles.menuSection}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            Appearance
+          </Text>
+          <View style={[styles.themeRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            {themeOptions.map((opt) => (
+              <Pressable
+                key={opt.value}
+                onPress={() => setThemeMode(opt.value)}
+                style={({ pressed }) => [
+                  styles.themeOption,
+                  themeMode === opt.value && { backgroundColor: colors.primaryFaded, borderColor: colors.primary },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Ionicons
+                  name={opt.icon as any}
+                  size={20}
+                  color={themeMode === opt.value ? colors.primary : colors.textSecondary}
+                />
+                <Text style={[
+                  styles.themeLabel,
+                  { color: themeMode === opt.value ? colors.primary : colors.textSecondary },
+                ]}>
+                  {opt.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
         {menuSections.map((section, si) => (
           <View key={si} style={styles.menuSection}>
             <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
@@ -146,34 +187,38 @@ export default function ProfileScreen() {
             </Text>
             <View style={[styles.menuCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               {section.items.map((item, ii) => (
-                <TouchableOpacity
+                <Pressable
                   key={ii}
-                  style={[
+                  style={({ pressed }) => [
                     styles.menuItem,
                     ii < section.items.length - 1 && {
                       borderBottomWidth: 1,
                       borderBottomColor: colors.borderLight,
                     },
+                    pressed && { opacity: 0.7 },
                   ]}
-                  activeOpacity={0.7}
                 >
                   <Ionicons name={item.icon as any} size={20} color={colors.primary} />
                   <Text style={[styles.menuLabel, { color: colors.text }]}>{item.label}</Text>
                   <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </View>
         ))}
 
         {/* Sign Out */}
-        <TouchableOpacity
-          style={[styles.signOutBtn, { borderColor: colors.error }]}
+        <Pressable
+          style={({ pressed }) => [
+            styles.signOutBtn,
+            { borderColor: colors.error },
+            pressed && { opacity: 0.7 },
+          ]}
           onPress={handleSignOut}
         >
           <Ionicons name="log-out-outline" size={20} color={colors.error} />
           <Text style={[styles.signOutText, { color: colors.error }]}>Sign Out</Text>
-        </TouchableOpacity>
+        </Pressable>
 
         {/* App Version */}
         <Text style={[styles.version, { color: colors.textTertiary }]}>
@@ -270,6 +315,28 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     fontSize: FontSize.base,
+    fontWeight: '600',
+  },
+  themeRow: {
+    flexDirection: 'row',
+    borderRadius: BorderRadius.xl,
+    borderWidth: 1,
+    overflow: 'hidden',
+    padding: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  themeOption: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    gap: 4,
+  },
+  themeLabel: {
+    fontSize: FontSize.xs,
     fontWeight: '600',
   },
   version: {

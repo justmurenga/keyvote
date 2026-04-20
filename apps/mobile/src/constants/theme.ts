@@ -100,4 +100,4 @@ export const BorderRadius = {
   full: 9999,
 } as const;
 
-export type ThemeColors = typeof Colors.light;
+export type ThemeColors = (typeof Colors)['light'] | (typeof Colors)['dark'];

@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { normalizePhone, formatCurrency, truncate } from '@myvote/shared';
-import type { Database } from '@myvote/database';
+import type { Database, ElectoralPosition } from '@myvote/database';
 
 interface UssdRequest {
   sessionId: string;
@@ -158,7 +158,7 @@ For more details, visit myvote.ke`;
       return 'END Please register first at myvote.ke to follow candidates.';
     }
 
-    const positions = [
+    const positions: { key: string; value: ElectoralPosition; label: string }[] = [
       { key: '1', value: 'president', label: 'President' },
       { key: '2', value: 'governor', label: 'Governor' },
       { key: '3', value: 'senator', label: 'Senator' },
@@ -405,7 +405,7 @@ Your wallet will be credited automatically.`;
       case '3':
         // Transaction history
         const { data: transactions } = await this.supabase
-          .from('transactions')
+          .from('wallet_transactions')
           .select('amount, type, created_at')
           .eq('wallet_id', (wallet as any)?.id || '')
           .order('created_at', { ascending: false })

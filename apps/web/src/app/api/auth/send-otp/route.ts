@@ -3,16 +3,7 @@ import { generateOTP, sendOTP, normalizePhoneNumber } from '@/lib/sms/africastal
 import { sendOTPEmail, isValidEmail } from '@/lib/email';
 import { storeOTP, isRateLimited, trackOTPRequest } from '@/lib/auth/otp-store';
 
-const isDevelopment = process.env.NODE_ENV === 'development';
-const apiKey = process.env.AT_API_KEY;
-const username = process.env.AT_USERNAME;
-// Check for real credentials (not placeholder values)
-const hasATCredentials = apiKey && 
-                       username && 
-                       !apiKey.includes('your-') && 
-                       username !== 'sandbox' &&
-                       username !== 'your-africastalking-username';
-const hasResendCredentials = process.env.RESEND_API_KEY && !process.env.RESEND_API_KEY.includes('your-');
+
 
 export async function POST(request: NextRequest) {
   try {
@@ -66,19 +57,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // In development without credentials, return the OTP for testing
-      if (isDevelopment && !hasResendCredentials) {
-        console.log(`[DEV] OTP for ${normalizedEmail}: ${otp}`);
-        return NextResponse.json({
-          success: true,
-          message: 'OTP sent to your email',
-          email: normalizedEmail,
-          method: 'email',
-          // DEV ONLY: Include OTP in response for testing
-          devOtp: otp,
-        });
-      }
-
       return NextResponse.json({
         success: true,
         message: 'OTP sent to your email',
@@ -126,19 +104,6 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to send OTP. Please try again.' },
         { status: 500 }
       );
-    }
-
-    // In development without credentials, return the OTP for testing
-    if (isDevelopment && !hasATCredentials) {
-      console.log(`[DEV] OTP for ${normalizedPhone}: ${otp}`);
-      return NextResponse.json({
-        success: true,
-        message: 'OTP sent successfully',
-        phone: normalizedPhone,
-        method: 'sms',
-        // DEV ONLY: Include OTP in response for testing
-        devOtp: otp,
-      });
     }
 
     return NextResponse.json({

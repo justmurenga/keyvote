@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getApiCurrentUser } from '@/lib/auth/get-user';
+import type { UserRole } from '@myvote/database';
 import { 
   hasPermission, 
   PERMISSIONS, 
@@ -54,9 +55,9 @@ export async function PUT(
       const { count } = await supabase
         .from('users')
         .select('id', { count: 'exact' })
-        .in('role', ['admin', 'system_admin']);
+        .in('role', ['party_admin', 'system_admin'] as UserRole[]);
       
-      if ((count || 0) <= 1 && !['admin', 'system_admin'].includes(newRole)) {
+      if ((count || 0) <= 1 && !['party_admin', 'system_admin'].includes(newRole)) {
         return NextResponse.json(
           { error: 'Cannot demote the last administrator' },
           { status: 400 }

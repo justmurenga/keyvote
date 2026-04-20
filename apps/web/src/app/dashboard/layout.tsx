@@ -46,7 +46,7 @@ export default async function DashboardLayout({
   }
 
   // Get user profile based on which auth method is active
-  let profile = null;
+  let profile: { full_name: string; role: string } | null = null;
   
   if (supabaseUser) {
     const { data } = await supabase
@@ -54,14 +54,14 @@ export default async function DashboardLayout({
       .select('full_name, role')
       .eq('id', supabaseUser.id)
       .single();
-    profile = data;
+    profile = data as any;
   } else if (customSession) {
     const { data } = await supabase
       .from('users')
       .select('full_name, role')
       .eq('id', customSession.userId)
       .single();
-    profile = data;
+    profile = data as any;
   }
 
   return (

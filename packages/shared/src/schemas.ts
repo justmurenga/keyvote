@@ -114,6 +114,39 @@ export const agentAssignmentSchema = z.object({
 export type AgentAssignment = z.infer<typeof agentAssignmentSchema>;
 
 /**
+ * Agent Invitation Schema
+ */
+export const REGION_TYPES = ['national', 'county', 'constituency', 'ward', 'polling_station'] as const;
+export type RegionType = (typeof REGION_TYPES)[number];
+
+export const agentInvitationSchema = z.object({
+  phone: z
+    .string()
+    .regex(/^(\+254|0)[17]\d{8}$/, 'Invalid Kenyan phone number')
+    .transform((val) => val.startsWith('0') ? `+254${val.slice(1)}` : val),
+  name: z.string().min(2, 'Full name is required').max(200),
+  regionType: z.enum(REGION_TYPES),
+  pollingStationId: z.string().uuid().optional(),
+  wardId: z.string().uuid().optional(),
+  constituencyId: z.string().uuid().optional(),
+  countyId: z.string().uuid().optional(),
+  mpesaNumber: z
+    .string()
+    .regex(/^(\+254|0)[17]\d{8}$/, 'Invalid Kenyan phone number')
+    .optional(),
+}).refine((data) => {
+  if (data.regionType === 'polling_station') return !!data.pollingStationId;
+  if (data.regionType === 'ward') return !!data.wardId;
+  if (data.regionType === 'constituency') return !!data.constituencyId;
+  if (data.regionType === 'county') return !!data.countyId;
+  return true; // national doesn't need a specific ID
+}, {
+  message: 'A region ID is required for the selected region type',
+});
+
+export type AgentInvitation = z.infer<typeof agentInvitationSchema>;
+
+/**
  * Message Schema
  */
 export const sendMessageSchema = z.object({

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.filterCandidatesSchema = exports.searchSchema = exports.paginationSchema = exports.mpesaCallbackSchema = exports.walletTransactionSchema = exports.sendMessageSchema = exports.agentAssignmentSchema = exports.electionResultSchema = exports.POLL_STATUSES = exports.pollVoteSchema = exports.createPollSchema = exports.candidateProfileSchema = exports.userLoginSchema = exports.userRegistrationSchema = void 0;
+exports.filterCandidatesSchema = exports.searchSchema = exports.paginationSchema = exports.mpesaCallbackSchema = exports.walletTransactionSchema = exports.sendMessageSchema = exports.agentInvitationSchema = exports.REGION_TYPES = exports.agentAssignmentSchema = exports.electionResultSchema = exports.POLL_STATUSES = exports.pollVoteSchema = exports.createPollSchema = exports.candidateProfileSchema = exports.userLoginSchema = exports.userRegistrationSchema = void 0;
 const zod_1 = require("zod");
 const constants_1 = require("./constants");
 /**
@@ -15,8 +15,7 @@ exports.userRegistrationSchema = zod_1.z.object({
         .string()
         .min(7, 'ID number must be at least 7 characters')
         .max(10, 'ID number must be at most 10 characters'),
-    first_name: zod_1.z.string().min(2, 'First name is required').max(50),
-    last_name: zod_1.z.string().min(2, 'Last name is required').max(50),
+    full_name: zod_1.z.string().min(2, 'Full name is required').max(200),
     gender: zod_1.z.enum(constants_1.GENDERS).optional(),
     age_bracket: zod_1.z.enum(constants_1.AGE_BRACKETS).optional(),
     polling_station_id: zod_1.z.string().uuid().optional(),
@@ -92,6 +91,38 @@ exports.agentAssignmentSchema = zod_1.z.object({
     user_id: zod_1.z.string().uuid(),
     polling_station_id: zod_1.z.string().uuid(),
     position: zod_1.z.enum(constants_1.ELECTORAL_POSITIONS),
+});
+/**
+ * Agent Invitation Schema
+ */
+exports.REGION_TYPES = ['national', 'county', 'constituency', 'ward', 'polling_station'];
+exports.agentInvitationSchema = zod_1.z.object({
+    phone: zod_1.z
+        .string()
+        .regex(/^(\+254|0)[17]\d{8}$/, 'Invalid Kenyan phone number')
+        .transform((val) => val.startsWith('0') ? `+254${val.slice(1)}` : val),
+    name: zod_1.z.string().min(2, 'Full name is required').max(200),
+    regionType: zod_1.z.enum(exports.REGION_TYPES),
+    pollingStationId: zod_1.z.string().uuid().optional(),
+    wardId: zod_1.z.string().uuid().optional(),
+    constituencyId: zod_1.z.string().uuid().optional(),
+    countyId: zod_1.z.string().uuid().optional(),
+    mpesaNumber: zod_1.z
+        .string()
+        .regex(/^(\+254|0)[17]\d{8}$/, 'Invalid Kenyan phone number')
+        .optional(),
+}).refine((data) => {
+    if (data.regionType === 'polling_station')
+        return !!data.pollingStationId;
+    if (data.regionType === 'ward')
+        return !!data.wardId;
+    if (data.regionType === 'constituency')
+        return !!data.constituencyId;
+    if (data.regionType === 'county')
+        return !!data.countyId;
+    return true; // national doesn't need a specific ID
+}, {
+    message: 'A region ID is required for the selected region type',
 });
 /**
  * Message Schema

@@ -114,17 +114,9 @@ export function clearOTP(identifier: string): void {
 
 /**
  * Check if rate limited
- * Dev mode: no rate limiting
- * Prod mode: 5 attempts per hour
+ * 5 attempts per hour
  */
 export function isRateLimited(identifier: string): boolean {
-  const isDev = process.env.NODE_ENV === 'development';
-  
-  // In dev mode, be very lenient
-  if (isDev) {
-    return false; // No rate limiting in dev mode
-  }
-  
   // Simple rate limiting - in production, use Redis with sliding window
   const key = `rate:${normalizeKey(identifier)}`;
   const data = otpStore.get(key);

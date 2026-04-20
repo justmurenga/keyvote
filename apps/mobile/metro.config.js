@@ -18,4 +18,12 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, 'node_modules'),
 ];
 
+// 3. Prevent Node-only modules from being bundled (e.g. ws uses "stream")
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === 'ws' || moduleName === 'stream') {
+    return { type: 'empty' };
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 module.exports = config;

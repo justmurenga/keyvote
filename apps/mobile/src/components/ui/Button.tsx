@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  TouchableOpacity,
+  Pressable,
   Text,
   ActivityIndicator,
   StyleSheet,
@@ -76,11 +76,10 @@ export function Button({
   };
 
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
       disabled={disabled || loading}
-      activeOpacity={0.7}
-      style={[
+      style={({ pressed }) => [
         styles.button,
         {
           backgroundColor: getBackgroundColor(),
@@ -89,6 +88,7 @@ export function Button({
         },
         getPadding(),
         fullWidth && styles.fullWidth,
+        pressed && { opacity: 0.7 },
         style,
       ]}
     >
@@ -109,7 +109,7 @@ export function Button({
           </Text>
         </>
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 

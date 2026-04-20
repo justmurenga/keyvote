@@ -98,7 +98,7 @@ export async function getOrCreateWallet(userId: string) {
       is_frozen: false,
       total_credited: 0,
       total_debited: 0,
-    })
+    } as any)
     .select('*')
     .single();
 
@@ -269,7 +269,7 @@ export async function creditWallet(params: CreateTransactionParams): Promise<str
       metadata: params.metadata ? params.metadata : null,
       status: 'completed',
       completed_at: new Date().toISOString(),
-    })
+    } as any)
     .select('id')
     .single();
 
@@ -341,7 +341,7 @@ export async function debitWallet(params: CreateTransactionParams): Promise<stri
       metadata: params.metadata ? params.metadata : null,
       status: 'completed',
       completed_at: new Date().toISOString(),
-    })
+    } as any)
     .select('id')
     .single();
 

@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Use the RPC function to get agents with full info
-    const { data: agents, error } = await adminClient.rpc('get_candidate_agents', {
+    const { data: agents, error } = await (adminClient as any).rpc('get_candidate_agents', {
       p_candidate_id: candidate.id,
       p_status: status || null,
     });
@@ -185,8 +185,8 @@ export async function POST(request: NextRequest) {
     // Create the agent invitation
     const invitationToken = crypto.randomUUID();
 
-    const { data: agent, error: insertError } = await adminClient
-      .from('agents')
+    const { data: agent, error: insertError } = await (adminClient
+      .from('agents') as any)
       .insert({
         user_id: existingUser?.id || '00000000-0000-0000-0000-000000000000',
         candidate_id: candidate.id,

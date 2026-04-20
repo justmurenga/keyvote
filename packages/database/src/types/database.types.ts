@@ -111,6 +111,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       agents: {
         Row: {
@@ -176,6 +177,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       candidates: {
         Row: {
@@ -256,6 +258,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       constituencies: {
         Row: {
@@ -285,6 +288,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       conversations: {
         Row: {
@@ -323,6 +327,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       counties: {
         Row: {
@@ -349,6 +354,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       election_result_submissions: {
         Row: {
@@ -405,6 +411,7 @@ export interface Database {
           verification_notes?: string | null
           created_at?: string | null
         }
+        Relationships: []
       }
       election_results: {
         Row: {
@@ -455,6 +462,7 @@ export interface Database {
           last_updated?: string | null
           created_at?: string | null
         }
+        Relationships: []
       }
       followers: {
         Row: {
@@ -505,6 +513,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       messages: {
         Row: {
@@ -546,6 +555,7 @@ export interface Database {
           delivered_at?: string | null
           created_at?: string | null
         }
+        Relationships: []
       }
       mpesa_disbursements: {
         Row: {
@@ -602,6 +612,7 @@ export interface Database {
           created_at?: string | null
           completed_at?: string | null
         }
+        Relationships: []
       }
       mpesa_stk_requests: {
         Row: {
@@ -646,6 +657,7 @@ export interface Database {
           created_at?: string | null
           completed_at?: string | null
         }
+        Relationships: []
       }
       party_members: {
         Row: {
@@ -681,6 +693,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       political_parties: {
         Row: {
@@ -752,6 +765,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       poll_votes: {
         Row: {
@@ -799,6 +813,7 @@ export interface Database {
           vote_source?: string | null
           created_at?: string | null
         }
+        Relationships: []
       }
       polling_stations: {
         Row: {
@@ -846,6 +861,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       polls: {
         Row: {
@@ -905,6 +921,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       result_sheets: {
         Row: {
@@ -952,6 +969,7 @@ export interface Database {
           longitude?: number | null
           created_at?: string | null
         }
+        Relationships: []
       }
       sms_campaigns: {
         Row: {
@@ -1029,6 +1047,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       sms_optouts: {
         Row: {
@@ -1049,6 +1068,7 @@ export interface Database {
           opted_out_at?: string | null
           reason?: string | null
         }
+        Relationships: []
       }
       sms_recipients: {
         Row: {
@@ -1087,6 +1107,7 @@ export interface Database {
           at_message_id?: string | null
           created_at?: string | null
         }
+        Relationships: []
       }
       user_preferences: {
         Row: {
@@ -1125,6 +1146,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       users: {
         Row: {
@@ -1190,6 +1212,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       wallet_transactions: {
         Row: {
@@ -1246,6 +1269,7 @@ export interface Database {
           created_at?: string | null
           completed_at?: string | null
         }
+        Relationships: []
       }
       wallets: {
         Row: {
@@ -1287,6 +1311,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       wards: {
         Row: {
@@ -1316,6 +1341,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       whatsapp_campaigns: {
         Row: {
@@ -1399,6 +1425,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
     }
     Views: {

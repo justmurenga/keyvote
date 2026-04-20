@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getApiCurrentUser } from '@/lib/auth/get-user';
+import type { UserRole } from '@myvote/database';
 import { 
   hasPermission, 
   PERMISSIONS, 
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     // Role filter
     if (role && role !== 'all') {
-      query = query.eq('role', role);
+      query = query.eq('role', role as UserRole);
     }
 
     // Status filter

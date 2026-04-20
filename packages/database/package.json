@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "description": "Database schema, migrations, and types for myVote Kenya",
-  "main": "./src/index.js",
-  "types": "./src/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "db:generate": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > ./src/types/database.types.ts",

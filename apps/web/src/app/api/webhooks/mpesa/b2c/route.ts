@@ -93,7 +93,9 @@ export async function POST(request: NextRequest) {
       .eq('conversation_id', parsed.conversationId)
       .single();
 
-    if (findError || !disbursement) {
+    let foundDisbursement = disbursement;
+
+    if (findError || !foundDisbursement) {
       // Try by originator conversation ID
       const { data: disbByOrig, error: origError } = await adminClient
         .from('mpesa_disbursements')
@@ -107,12 +109,12 @@ export async function POST(request: NextRequest) {
       }
       
       // Use the one found by originator conversation ID
-      Object.assign(disbursement, disbByOrig);
+      foundDisbursement = disbByOrig;
     }
 
     // Check if already processed
-    if (disbursement.status !== 'pending') {
-      console.log('[B2C Callback] Already processed:', disbursement.id);
+    if (foundDisbursement.status !== 'pending') {
+      console.log('[B2C Callback] Already processed:', foundDisbursement.id);
       return NextResponse.json({ ResultCode: 0, ResultDesc: 'Already processed' });
     }
 
@@ -131,23 +133,23 @@ export async function POST(request: NextRequest) {
         recipient_name: parsed.recipientName || null,
         completed_at: new Date().toISOString(),
       })
-      .eq('id', disbursement.id);
+      .eq('id', foundDisbursement.id);
 
     if (updateError) {
       console.error('[B2C Callback] Failed to update disbursement:', updateError);
     }
 
     // If failed, we might need to refund the wallet
-    if (!isSuccess && disbursement.transaction_id) {
+    if (!isSuccess && foundDisbursement.transaction_id) {
       // The wallet was already debited, need to create a refund
       const { data: wallet } = await adminClient
         .from('wallets')
         .select('balance, total_credited')
-        .eq('id', disbursement.sender_wallet_id)
+        .eq('id', foundDisbursement.sender_wallet_id)
         .single();
 
       if (wallet) {
-        const refundAmount = disbursement.amount;
+        const refundAmount = foundDisbursement.amount;
         const balanceBefore = wallet.balance || 0;
         const balanceAfter = balanceBefore + refundAmount;
 
@@ -155,13 +157,13 @@ export async function POST(request: NextRequest) {
         const { error: txError } = await adminClient
           .from('wallet_transactions')
           .insert({
-            wallet_id: disbursement.sender_wallet_id,
+            wallet_id: foundDisbursement.sender_wallet_id,
             type: 'refund',
             amount: refundAmount,
             balance_before: balanceBefore,
             balance_after: balanceAfter,
             description: `Refund for failed withdrawal: ${parsed.resultDesc}`,
-            reference: `REFUND-${disbursement.id.substring(0, 8)}`,
+            reference: `REFUND-${foundDisbursement.id.substring(0, 8)}`,
             external_reference: parsed.conversationId,
             status: 'completed',
             completed_at: new Date().toISOString(),
@@ -178,10 +180,10 @@ export async function POST(request: NextRequest) {
               total_credited: (wallet.total_credited || 0) + refundAmount,
               updated_at: new Date().toISOString(),
             })
-            .eq('id', disbursement.sender_wallet_id);
+            .eq('id', foundDisbursement.sender_wallet_id);
 
           console.log('[B2C Callback] Refund processed:', {
-            walletId: disbursement.sender_wallet_id,
+            walletId: foundDisbursement.sender_wallet_id,
             amount: refundAmount,
             newBalance: balanceAfter,
           });

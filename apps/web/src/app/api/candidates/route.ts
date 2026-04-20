@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import type { ElectoralPosition } from '@myvote/database';
 
 const POSITION_LABELS: Record<string, string> = {
   president: 'President',
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
 
     // Filter by position
     if (position && position !== 'all') {
-      query = query.eq('position', position);
+      query = query.eq('position', position as ElectoralPosition);
     }
 
     // Filter by location based on position

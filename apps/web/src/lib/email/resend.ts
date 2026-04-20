@@ -3,10 +3,8 @@ import { generateOTPEmailHTML } from './templates/otp';
 
 // Initialize Resend client
 const resendApiKey = process.env.RESEND_API_KEY;
-const hasResendCredentials = resendApiKey && !resendApiKey.includes('your-');
-const isDevelopment = process.env.NODE_ENV === 'development';
 
-const resend = hasResendCredentials ? new Resend(resendApiKey) : null;
+const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
 const DEFAULT_FROM = process.env.EMAIL_FROM || 'myVote Kenya <noreply@myvote.ke>';
 
@@ -30,16 +28,6 @@ export interface EmailResponse {
 export async function sendEmail(options: SendEmailOptions): Promise<EmailResponse> {
   try {
     const recipients = Array.isArray(options.to) ? options.to : [options.to];
-
-    // DEV MODE: Skip actual email sending if no credentials
-    if (isDevelopment && !hasResendCredentials) {
-      console.log(`[DEV MODE] Email would be sent to ${recipients.join(', ')}`);
-      console.log(`[DEV MODE] Subject: ${options.subject}`);
-      return {
-        success: true,
-        messageId: `dev-email-${Date.now()}`,
-      };
-    }
 
     if (!resend) {
       console.error('[email] Resend not configured — missing RESEND_API_KEY');

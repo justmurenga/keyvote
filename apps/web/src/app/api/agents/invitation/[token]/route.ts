@@ -13,8 +13,8 @@ export async function GET(
     const { token } = await params;
     const adminClient = createAdminClient();
 
-    const { data: agent, error } = await adminClient
-      .from('agents')
+    const { data: agent, error } = await (adminClient
+      .from('agents') as any)
       .select(`
         id,
         status,

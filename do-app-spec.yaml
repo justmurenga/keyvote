@@ -9,6 +9,12 @@ name: myvote-kenya
 
 region: fra
 
+domains:
+  - domain: keyvote.online
+    type: PRIMARY
+  - domain: www.keyvote.online
+    type: ALIAS
+
 alerts:
   - rule: DEPLOYMENT_FAILED
   - rule: DOMAIN_FAILED
@@ -39,7 +45,7 @@ services:
       - key: SUPABASE_SERVICE_ROLE_KEY
         type: SECRET
       - key: NEXT_PUBLIC_APP_URL
-        type: SECRET
+        value: "https://keyvote.online"
       - key: NEXT_PUBLIC_APP_NAME
         value: "myVote Kenya"
       - key: AT_API_KEY

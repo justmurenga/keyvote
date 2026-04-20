@@ -12,12 +12,10 @@ async function FeaturedCandidates() {
     .from('candidates')
     .select(`
       id,
-      photo_url,
-      manifesto_summary,
       position,
       follower_count,
-      users!inner(full_name),
-      political_parties(name, logo_url, abbreviation)
+      users!inner(full_name, profile_photo_url),
+      political_parties(name, symbol_url, abbreviation)
     `)
     .order('follower_count', { ascending: false })
     .limit(6);
@@ -25,6 +23,13 @@ async function FeaturedCandidates() {
   if (!candidates || candidates.length === 0) {
     return null;
   }
+
+  // Flatten the users relation (array from join) to a single object
+  const flatCandidates = candidates.map((c) => ({
+    ...c,
+    user: Array.isArray(c.users) ? c.users[0] : c.users,
+    party: Array.isArray(c.political_parties) ? c.political_parties[0] : c.political_parties,
+  }));
 
   const positionLabels: Record<string, string> = {
     president: 'Presidential',
@@ -50,7 +55,7 @@ async function FeaturedCandidates() {
           </Link>
         </div>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {candidates.map((candidate) => (
+          {flatCandidates.map((candidate) => (
             <Link 
               key={candidate.id} 
               href={`/candidates/${candidate.id}`}
@@ -59,28 +64,28 @@ async function FeaturedCandidates() {
               <div className="rounded-lg border bg-card p-6 shadow-sm transition-all hover:shadow-md hover:border-primary/50">
                 <div className="flex items-start gap-4">
                   <div className="h-16 w-16 rounded-full bg-muted overflow-hidden flex-shrink-0">
-                    {candidate.photo_url ? (
+                    {candidate.user?.profile_photo_url ? (
                       <img 
-                        src={candidate.photo_url} 
-                        alt={candidate.users?.full_name || 'Candidate'}
+                        src={candidate.user.profile_photo_url} 
+                        alt={candidate.user?.full_name || 'Candidate'}
                         className="h-full w-full object-cover"
                       />
                     ) : (
                       <div className="h-full w-full flex items-center justify-center text-2xl font-bold text-muted-foreground">
-                        {candidate.users?.full_name?.charAt(0) || '?'}
+                        {candidate.user?.full_name?.charAt(0) || '?'}
                       </div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold group-hover:text-primary transition-colors truncate">
-                      {candidate.users?.full_name || 'Unknown Candidate'}
+                      {candidate.user?.full_name || 'Unknown Candidate'}
                     </h3>
                     <p className="text-sm text-primary">
                       {positionLabels[candidate.position] || candidate.position}
                     </p>
-                    {candidate.political_parties && (
+                    {candidate.party && (
                       <p className="text-sm text-muted-foreground truncate">
-                        {candidate.political_parties.name}
+                        {candidate.party.name}
                       </p>
                     )}
                   </div>
@@ -255,7 +260,6 @@ export default async function HomePage() {
       </section>
 
       {/* Featured Candidates */}
-      {/* @ts-expect-error Async Server Component */}
       <FeaturedCandidates />
 
       {/* CTA Section */}

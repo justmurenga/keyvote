@@ -23,7 +23,7 @@ type Step = 'phone' | 'otp';
 export default function LoginScreen() {
   const router = useRouter();
   const colors = useTheme();
-  const { signInWithOTP, verifyOTP } = useAuthStore();
+  const { sendOTP, verifyOTP } = useAuthStore();
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
@@ -56,12 +56,17 @@ export default function LoginScreen() {
     setIsLoading(true);
     const normalized = normalizePhone(phone);
 
-    const { error } = await signInWithOTP(normalized);
+    const { error, devOtp } = await sendOTP(normalized);
     setIsLoading(false);
 
     if (error) {
       Alert.alert('Error', error);
       return;
+    }
+
+    if (devOtp) {
+      const digits = devOtp.split('');
+      setOtp(digits);
     }
 
     setStep('otp');
@@ -107,7 +112,7 @@ export default function LoginScreen() {
 
     setIsLoading(true);
     const normalized = normalizePhone(phone);
-    const { error } = await verifyOTP(normalized, otpCode);
+    const { error } = await verifyOTP(normalized, otpCode, 'login');
     setIsLoading(false);
 
     if (error) {
@@ -122,7 +127,7 @@ export default function LoginScreen() {
     if (countdown > 0) return;
     setIsLoading(true);
     const normalized = normalizePhone(phone);
-    await signInWithOTP(normalized);
+    await sendOTP(normalized);
     setIsLoading(false);
     setCountdown(60);
     setOtp(['', '', '', '', '', '']);

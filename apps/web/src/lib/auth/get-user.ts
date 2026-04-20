@@ -135,6 +135,11 @@ export async function getApiCurrentUser(supabase: any): Promise<{
 /**
  * Check if user is authenticated (for API routes)
  */
+export const getUser = getCurrentUser;
+
+/**
+ * Check if user is authenticated (for API routes)
+ */
 export async function isAuthenticated(): Promise<boolean> {
   const supabase = await createClient();
   const userId = await resolveUserId(supabase);

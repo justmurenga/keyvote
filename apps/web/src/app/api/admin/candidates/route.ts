@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getApiCurrentUser } from '@/lib/auth/get-user';
 import { hasPermission, PERMISSIONS, type Role } from '@/lib/auth/permissions';
+import type { ElectoralPosition } from '@myvote/database';
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (position) query = query.eq('position', position);
+    if (position) query = query.eq('position', position as ElectoralPosition);
     if (verification === 'verified') query = query.eq('is_verified', true);
     if (verification === 'unverified') query = query.eq('is_verified', false);
     if (verification === 'active') query = query.eq('is_active', true);

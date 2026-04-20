@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getApiCurrentUser } from '@/lib/auth/get-user';
+import type { ElectoralPosition } from '@myvote/database';
 
 // GET - Get single poll details
 export async function GET(
@@ -37,7 +38,7 @@ export async function GET(
     const pollData = poll as {
       id: string;
       title: string;
-      position: string;
+      position: ElectoralPosition;
       [key: string]: any;
     };
 

@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         existingUser = data as typeof existingUser;
       }
 
-      let user = existingUser;
+      let user: { id: string; phone: any; full_name: string; role: string; email: any } | null = existingUser;
 
       // If no user exists, auto-create one (seamless sign-up)
       if (!user) {

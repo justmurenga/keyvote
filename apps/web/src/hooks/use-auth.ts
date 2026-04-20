@@ -47,7 +47,7 @@ export function useAuth(): UseAuthReturn {
           .select('id, phone, email, full_name, role, is_verified, profile_photo_url, gender, age_bracket, bio, polling_station_id')
           .eq('id', authUser.id)
           .single();
-        setProfile(profileData);
+        setProfile(profileData as UserProfile | null);
       } else {
         // Fallback: check custom session via /api/auth/me (for OTP login)
         try {
@@ -100,7 +100,7 @@ export function useAuth(): UseAuthReturn {
               .select('id, phone, email, full_name, role, is_verified, profile_photo_url, gender, age_bracket, bio, polling_station_id')
               .eq('id', session.user.id)
               .single();
-            setProfile(profileData);
+            setProfile(profileData as UserProfile | null);
           }
         } else if (event === 'SIGNED_OUT') {
           setUser(null);

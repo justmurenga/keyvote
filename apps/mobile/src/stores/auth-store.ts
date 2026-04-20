@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
+import { API_BASE_URL } from '@/constants';
+import * as SecureStore from 'expo-secure-store';
 import type { Session, User } from '@supabase/supabase-js';
 
 interface UserProfile {
@@ -30,13 +32,25 @@ interface AuthState {
 
   // Actions
   initialize: () => Promise<void>;
-  signInWithOTP: (phone: string) => Promise<{ error: string | null }>;
-  verifyOTP: (phone: string, token: string) => Promise<{ error: string | null }>;
+  sendOTP: (phone: string) => Promise<{ error: string | null; devOtp?: string }>;
+  verifyOTP: (phone: string, otp: string, action?: 'login' | 'register') => Promise<{ error: string | null; user?: any; isNewUser?: boolean }>;
+  register: (data: {
+    phone: string;
+    firstName: string;
+    lastName: string;
+    idNumber: string;
+    pollingStationId?: string;
+  }) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
-  fetchProfile: () => Promise<void>;
+  fetchProfile: (userId?: string) => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<{ error: string | null }>;
   setSession: (session: Session | null) => void;
+
+  // Keep for backward compat
+  signInWithOTP: (phone: string) => Promise<{ error: string | null }>;
 }
+
+const SESSION_KEY = 'myvote-session';
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
@@ -47,6 +61,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     try {
+      // First check Supabase native session
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         set({
@@ -55,6 +70,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isAuthenticated: true,
         });
         await get().fetchProfile();
+        set({ isLoading: false });
+        return;
+      }
+
+      // Fall back to custom session stored in SecureStore
+      const stored = await SecureStore.getItemAsync(SESSION_KEY);
+      if (stored) {
+        try {
+          const sessionData = JSON.parse(stored);
+          if (sessionData.expiresAt > Date.now()) {
+            set({
+              isAuthenticated: true,
+              user: { id: sessionData.userId } as any,
+              profile: {
+                id: sessionData.userId,
+                phone: sessionData.phone,
+                full_name: sessionData.fullName,
+                role: sessionData.role,
+              } as UserProfile,
+            });
+            // Fetch full profile
+            await get().fetchProfile(sessionData.userId);
+          } else {
+            await SecureStore.deleteItemAsync(SESSION_KEY);
+          }
+        } catch (e) {
+          await SecureStore.deleteItemAsync(SESSION_KEY);
+        }
       }
     } catch (error) {
       console.error('Auth initialization error:', error);
@@ -67,44 +110,102 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({
         session,
         user: session?.user ?? null,
-        isAuthenticated: !!session,
+        isAuthenticated: !!session || get().isAuthenticated,
       });
       if (session) {
         get().fetchProfile();
-      } else {
-        set({ profile: null });
       }
     });
   },
 
-  signInWithOTP: async (phone: string) => {
+  sendOTP: async (phone: string) => {
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone,
+      const res = await fetch(`${API_BASE_URL}/api/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
       });
-      if (error) return { error: error.message };
-      return { error: null };
+      const data = await res.json();
+      if (!res.ok) return { error: data.error || 'Failed to send OTP' };
+      return { error: null, devOtp: data.devOtp };
     } catch (err: any) {
-      return { error: err.message || 'Failed to send OTP' };
+      return { error: err.message || 'Network error. Is the web server running?' };
     }
   },
 
-  verifyOTP: async (phone: string, token: string) => {
+  // Backward compat alias
+  signInWithOTP: async (phone: string) => {
+    return get().sendOTP(phone);
+  },
+
+  verifyOTP: async (phone: string, otp: string, action: 'login' | 'register' = 'login') => {
     try {
-      const { error } = await supabase.auth.verifyOtp({
-        phone,
-        token,
-        type: 'sms',
+      const res = await fetch(`${API_BASE_URL}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp, action }),
       });
-      if (error) return { error: error.message };
+      const data = await res.json();
+      if (!res.ok) return { error: data.error || 'Verification failed' };
+
+      if (action === 'login' && data.user) {
+        // Store session locally
+        const sessionData = {
+          userId: data.user.id,
+          phone: data.user.phone,
+          fullName: data.user.full_name,
+          role: data.user.role,
+          email: data.user.email,
+          expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        };
+        await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(sessionData));
+
+        set({
+          isAuthenticated: true,
+          user: { id: data.user.id } as any,
+          profile: data.user as UserProfile,
+        });
+
+        // Fetch full profile
+        await get().fetchProfile(data.user.id);
+      }
+
+      return { error: null, user: data.user, isNewUser: data.isNewUser };
+    } catch (err: any) {
+      return { error: err.message || 'Network error' };
+    }
+  },
+
+  register: async ({ phone, firstName, lastName, idNumber, pollingStationId }) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone,
+          firstName,
+          lastName,
+          idNumber,
+          pollingStationId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { error: data.error || 'Registration failed' };
+
+      // After registration, auto-login
       return { error: null };
     } catch (err: any) {
-      return { error: err.message || 'Failed to verify OTP' };
+      return { error: err.message || 'Network error' };
     }
   },
 
   signOut: async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      // ignore
+    }
+    await SecureStore.deleteItemAsync(SESSION_KEY);
     set({
       session: null,
       user: null,
@@ -113,15 +214,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 
-  fetchProfile: async () => {
-    const { user } = get();
-    if (!user) return;
+  fetchProfile: async (userId?: string) => {
+    const id = userId || get().user?.id;
+    if (!id) return;
 
     try {
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', id)
         .single();
 
       if (!error && data) {
@@ -133,19 +234,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   updateProfile: async (updates: Partial<UserProfile>) => {
-    const { user } = get();
-    if (!user) return { error: 'Not authenticated' };
+    const id = get().user?.id || get().profile?.id;
+    if (!id) return { error: 'Not authenticated' };
 
     try {
       const { error } = await supabase
         .from('users')
         .update(updates)
-        .eq('id', user.id);
+        .eq('id', id);
 
       if (error) return { error: error.message };
 
       // Refresh profile
-      await get().fetchProfile();
+      await get().fetchProfile(id);
       return { error: null };
     } catch (err: any) {
       return { error: err.message || 'Failed to update profile' };

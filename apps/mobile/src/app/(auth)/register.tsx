@@ -31,7 +31,7 @@ interface Region {
 export default function RegisterScreen() {
   const router = useRouter();
   const colors = useTheme();
-  const { signInWithOTP, verifyOTP, updateProfile } = useAuthStore();
+  const { sendOTP, verifyOTP, register, updateProfile } = useAuthStore();
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
@@ -86,11 +86,16 @@ export default function RegisterScreen() {
     }
     setIsLoading(true);
     const normalized = normalizePhone(phone);
-    const { error } = await signInWithOTP(normalized);
+    const { error, devOtp } = await sendOTP(normalized);
     setIsLoading(false);
     if (error) {
       Alert.alert('Error', error);
       return;
+    }
+    if (devOtp) {
+      // In dev mode, auto-fill OTP
+      const digits = devOtp.split('');
+      setOtp(digits);
     }
     setStep('otp');
     setCountdown(60);
@@ -124,7 +129,7 @@ export default function RegisterScreen() {
     }
     setIsLoading(true);
     const normalized = normalizePhone(phone);
-    const { error } = await verifyOTP(normalized, otpCode);
+    const { error } = await verifyOTP(normalized, otpCode, 'register');
     setIsLoading(false);
     if (error) {
       Alert.alert('Error', error);
@@ -188,30 +193,60 @@ export default function RegisterScreen() {
 
   const handleComplete = async () => {
     setIsLoading(true);
+    const normalized = normalizePhone(phone);
 
-    const profileData: any = {
-      first_name: firstName,
-      last_name: lastName,
-      full_name: `${firstName} ${lastName}`,
-    };
+    // Step 1: Register via web API
+    const { error: regError } = await register({
+      phone: normalized,
+      firstName,
+      lastName,
+      idNumber: idNumber || '00000000',
+      pollingStationId: selectedStation || undefined,
+    });
 
-    if (idNumber) profileData.id_number = idNumber;
-    if (gender) profileData.gender = gender;
-    if (ageBracket) profileData.age_bracket = ageBracket;
-    if (selectedStation) profileData.polling_station_id = selectedStation;
-    if (selectedWard) profileData.ward_id = selectedWard;
-    if (selectedConstituency) profileData.constituency_id = selectedConstituency;
-    if (selectedCounty) profileData.county_id = selectedCounty;
-
-    const { error } = await updateProfile(profileData);
-    setIsLoading(false);
-
-    if (error) {
-      Alert.alert('Error', error);
+    if (regError) {
+      setIsLoading(false);
+      Alert.alert('Error', regError);
       return;
     }
 
-    router.replace('/(tabs)/home');
+    // Step 2: Auto-login via verify-otp with login action
+    // Send a new OTP for login
+    const { error: otpError, devOtp } = await sendOTP(normalized);
+    if (otpError) {
+      setIsLoading(false);
+      // Registration succeeded but auto-login failed, redirect to login
+      Alert.alert('Success', 'Account created! Please sign in.', [
+        { text: 'OK', onPress: () => router.replace('/(auth)/login') },
+      ]);
+      return;
+    }
+
+    // If dev OTP is available, auto-verify login
+    if (devOtp) {
+      const { error: loginError } = await verifyOTP(normalized, devOtp, 'login');
+      if (!loginError) {
+        // Update extra profile fields
+        const profileData: any = {};
+        if (gender) profileData.gender = gender;
+        if (ageBracket) profileData.age_bracket = ageBracket;
+        if (selectedWard) profileData.ward_id = selectedWard;
+        if (selectedConstituency) profileData.constituency_id = selectedConstituency;
+        if (selectedCounty) profileData.county_id = selectedCounty;
+        if (Object.keys(profileData).length > 0) {
+          await updateProfile(profileData);
+        }
+        setIsLoading(false);
+        router.replace('/(tabs)/home');
+        return;
+      }
+    }
+
+    setIsLoading(false);
+    // Registration succeeded, redirect to login
+    Alert.alert('Success', 'Account created successfully! Please sign in.', [
+      { text: 'OK', onPress: () => router.replace('/(auth)/login') },
+    ]);
   };
 
   const stepNumber = step === 'phone' ? 1 : step === 'otp' ? 2 : step === 'details' ? 3 : 4;

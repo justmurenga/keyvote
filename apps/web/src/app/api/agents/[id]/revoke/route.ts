@@ -59,8 +59,8 @@ export async function POST(
     }
 
     // Revoke the agent
-    const { data: updated, error: updateError } = await adminClient
-      .from('agents')
+    const { data: updated, error: updateError } = await (adminClient
+      .from('agents') as any)
       .update({
         status: 'revoked',
         revoked_at: new Date().toISOString(),

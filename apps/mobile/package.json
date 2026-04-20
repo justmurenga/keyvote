@@ -5,8 +5,11 @@
   "main": "expo-router/entry",
   "scripts": {
     "dev": "cross-env EXPO_NO_DOCTOR=1 expo start",
+    "web": "cross-env EXPO_NO_DOCTOR=1 expo start --web",
     "android": "expo start --android",
     "ios": "expo start --ios",
+    "dev:build": "cross-env EXPO_NO_DOCTOR=1 expo start --dev-client",
+    "build:dev-apk": "eas build --profile development --platform android",
     "build": "expo export --platform android",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit"
@@ -38,6 +41,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
+    "@expo/webpack-config": "^19.0.1",
     "@types/react": "~18.3.0",
     "cross-env": "^10.1.0",
     "eslint": "^8.57.0",

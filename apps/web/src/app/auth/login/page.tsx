@@ -82,20 +82,11 @@ export default function LoginPage() {
         throw new Error(data.error || 'Failed to send OTP');
       }
 
-      // DEV MODE: Show OTP in toast if returned
-      if (data.devOtp) {
-        toast({
-          title: 'DEV MODE - OTP sent!',
-          description: `Your OTP is: ${data.devOtp}`,
-          duration: 30000, // Show for 30 seconds
-        });
-      } else {
-        const destination = authMethod === 'email' ? email : normalizePhone(phone);
-        toast({
-          title: 'OTP sent!',
-          description: `Enter the 6-digit code sent to ${destination}`,
-        });
-      }
+      const destination = authMethod === 'email' ? email : normalizePhone(phone);
+      toast({
+        title: 'OTP sent!',
+        description: `Enter the 6-digit code sent to ${destination}`,
+      });
 
       setStep('otp');
       setCountdown(60);
@@ -237,21 +228,12 @@ export default function LoginPage() {
         throw new Error(data.error || 'Failed to resend OTP');
       }
 
-      // DEV MODE: Show OTP in toast if returned
-      if (data.devOtp) {
-        toast({
-          title: 'DEV MODE - OTP resent!',
-          description: `Your OTP is: ${data.devOtp}`,
-          duration: 30000,
-        });
-      } else {
-        toast({
-          title: 'OTP resent!',
-          description: authMethod === 'email'
-            ? 'Check your email for the new code.'
-            : 'Check your phone for the new code.',
-        });
-      }
+      toast({
+        title: 'OTP resent!',
+        description: authMethod === 'email'
+          ? 'Check your email for the new code.'
+          : 'Check your phone for the new code.',
+      });
       setOtp(['', '', '', '', '', '']);
       setCountdown(60);
       otpInputs.current[0]?.focus();

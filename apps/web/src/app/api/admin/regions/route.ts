@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
     // Get total voters from national view
     let totalVoters = 0;
     try {
-      const { data: nationalStats } = await (adminClient.from('mv_national_voter_stats') as any).select('total_registered_voters').single();
+      const { data: nationalStats } = await (adminClient as any).from('mv_national_voter_stats').select('total_registered_voters').single();
       totalVoters = nationalStats?.total_registered_voters || 0;
     } catch {
       // Materialized view may not exist

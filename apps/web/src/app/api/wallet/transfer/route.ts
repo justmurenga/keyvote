@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Perform the transfer using database function for atomicity
-    const { data: transferResult, error: transferError } = await adminClient
+    const { data: transferResult, error: transferError } = await (adminClient as any)
       .rpc('transfer_between_wallets', {
         p_sender_wallet_id: senderWallet.id,
         p_recipient_wallet_id: recipientWallet.id,
@@ -258,7 +258,7 @@ export async function GET(request: NextRequest) {
     const adminClient = createAdminClient();
 
     // Build query based on type
-    let query = adminClient
+    let query = (adminClient as any)
       .from('wallet_transfers')
       .select(`
         *,
@@ -291,7 +291,7 @@ export async function GET(request: NextRequest) {
     const totalPages = Math.ceil(total / pageSize);
 
     // Add direction indicator to each transfer
-    const transfersWithDirection = (transfers || []).map(transfer => ({
+    const transfersWithDirection = (transfers || []).map((transfer: any) => ({
       ...transfer,
       direction: transfer.sender_user_id === userId ? 'sent' : 'received',
       displayAmount: transfer.sender_user_id === userId ? -transfer.amount : transfer.amount,

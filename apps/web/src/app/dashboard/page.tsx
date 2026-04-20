@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, BarChart3, Vote, Wallet, Heart } from 'lucide-react';
+import { Users, BarChart3, Vote, Wallet, Heart, UserPlus, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { VoterAggregateCard } from '@/components/dashboard/voter-aggregate-card';
 import { ProfileCompletionBanner } from '@/components/dashboard/profile-completion-banner';
@@ -32,6 +32,7 @@ export default async function DashboardPage() {
 
   // Get following count for current user
   let followingCount = 0;
+  let userRole = 'voter';
   if (currentUserId) {
     const { count } = await supabase
       .from('followers')
@@ -39,6 +40,14 @@ export default async function DashboardPage() {
       .eq('voter_id', currentUserId)
       .eq('is_following', true);
     followingCount = count || 0;
+
+    // Get user role
+    const { data: userProfile } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', currentUserId)
+      .single();
+    userRole = userProfile?.role || 'voter';
   }
 
   // Get active polls count
@@ -185,6 +194,46 @@ export default async function DashboardPage() {
           </Card>
         </Link>
       </div>
+
+      {/* Become a Candidate CTA (non-candidates) or Candidate Dashboard link */}
+      {userRole !== 'candidate' && (
+        <Link href="/dashboard/become-candidate">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow border-primary/30 bg-gradient-to-r from-primary/5 to-primary/10">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-primary/20">
+                  <UserPlus className="h-6 w-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg">Become a Candidate</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Register as a political candidate and start building your campaign on myVote Kenya
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
+      {userRole === 'candidate' && (
+        <Link href="/dashboard/candidate">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow border-green-300/50 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-green-500/20">
+                  <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg">Candidate Dashboard</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Manage your campaign, view analytics, coordinate agents, and track results
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
 
       {/* Voter Aggregates - Regional Stats */}
       <VoterAggregateCard />

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getApiCurrentUser } from '@/lib/auth/get-user';
+import type { ElectoralPosition } from '@myvote/database';
 
 // GET - Get poll results breakdown by region with drill-down support
 export async function GET(
@@ -25,7 +26,7 @@ export async function GET(
       .from('polls')
       .select('id, title, position')
       .eq('id', id)
-      .single() as { data: { id: string; title: string; position: string } | null; error: any };
+      .single() as { data: { id: string; title: string; position: ElectoralPosition } | null; error: any };
 
     if (pollError || !poll) {
       return NextResponse.json({ error: 'Poll not found' }, { status: 404 });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import type { ElectoralPosition } from '@myvote/database';
 
 const POSITION_LABELS: Record<string, string> = {
   president: 'Presidential',
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
           )
         )
       `)
-      .eq('position', position)
+      .eq('position', position as ElectoralPosition)
       .eq('is_verified', true)
       .order('created_at', { ascending: false });
 

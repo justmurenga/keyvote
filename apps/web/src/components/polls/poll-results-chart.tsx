@@ -119,7 +119,7 @@ export function DemographicBreakdown({
     <Card>
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
-          {icon || <BarChart3 className="h-5 w-5" />}
+          {icon ? <>{icon}</> : <BarChart3 className="h-5 w-5" />}
           {title}
         </CardTitle>
       </CardHeader>

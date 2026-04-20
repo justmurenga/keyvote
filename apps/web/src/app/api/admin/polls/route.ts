@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getApiCurrentUser } from '@/lib/auth/get-user';
+import type { ElectoralPosition, PollStatus } from '@myvote/database';
 
 const POSITION_LABELS: Record<string, string> = {
   president: 'Presidential',
@@ -40,11 +41,11 @@ export async function GET(request: NextRequest) {
       `, { count: 'exact' });
 
     if (status && status !== 'all') {
-      query = query.eq('status', status);
+      query = query.eq('status', status as PollStatus);
     }
 
     if (position && position !== 'all') {
-      query = query.eq('position', position);
+      query = query.eq('position', position as ElectoralPosition);
     }
 
     query = query

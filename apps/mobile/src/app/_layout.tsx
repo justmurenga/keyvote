@@ -3,6 +3,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
+import { useThemeStore } from '@/stores/theme-store';
+import { useIsDarkMode } from '@/hooks/useTheme';
 import { LoadingScreen } from '@/components/ui';
 
 const queryClient = new QueryClient({
@@ -16,6 +18,7 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   const { initialize, isLoading } = useAuthStore();
+  const isDark = useIsDarkMode();
 
   useEffect(() => {
     initialize();
@@ -27,7 +30,7 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <StatusBar style="auto" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
           headerShown: false,

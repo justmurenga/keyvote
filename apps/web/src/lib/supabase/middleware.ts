@@ -21,6 +21,8 @@ const publicRoutes = [
   '/polls',
   '/results',
   '/about',
+  '/agents/accept', // Agent invitation acceptance pages
+  '/api/agents/invitation', // Public invitation details API
   '/dashboard', // Keep public for now
 ];
 
