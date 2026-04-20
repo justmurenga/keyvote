@@ -1,1 +1,1 @@
-web: node apps/web/.next/standalone/apps/web/server.js
+web: cd apps/web && npm start

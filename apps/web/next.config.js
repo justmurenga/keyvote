@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
   reactStrictMode: true,
   transpilePackages: ['@myvote/database', '@myvote/shared'],
   webpack: (config, { isServer }) => {

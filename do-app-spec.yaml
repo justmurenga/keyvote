@@ -21,14 +21,15 @@ alerts:
 
 services:
   # ──────────────────────────────────────────
-  # Web Application (Next.js Standalone)
+  # Web Application (Next.js)
   # ──────────────────────────────────────────
   - name: web
     github:
       repo: justmurenga/keyvote
       branch: main
       deploy_on_push: true
-    dockerfile_path: apps/web/Dockerfile
+    build_command: npm install -g pnpm@8.14.0 && pnpm install --frozen-lockfile && pnpm turbo build --filter=@myvote/web
+    run_command: cd apps/web && npx next start -p 3000
     source_dir: /
     instance_size_slug: basic-xs
     instance_count: 1
