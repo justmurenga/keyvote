@@ -50,8 +50,8 @@ export function normalizePhoneNumber(phone: string): string {
  */
 export async function sendSMS(options: AirtouchSendOptions): Promise<AirtouchResponse> {
   const recipients = Array.isArray(options.to)
-    ? options.to.map(normalizePhoneNumber)
-    : [normalizePhoneNumber(options.to)];
+    ? options.to.map(n => normalizePhoneNumber(n).replace(/^\+/, ''))
+    : [normalizePhoneNumber(options.to).replace(/^\+/, '')];
 
   const senderId = options.senderId || DEFAULT_SENDER_ID;
 
@@ -70,37 +70,46 @@ export async function sendSMS(options: AirtouchSendOptions): Promise<AirtouchRes
 
   for (const batch of batches) {
     try {
-      const params = new URLSearchParams({
+      const payload = {
         username: AIRTOUCH_USERNAME,
         password: getPassword(),
-        sender: senderId,
-        message: options.message,
-        mobile: batch.join(','),
-      });
+        issn: senderId,
+        msisdn: batch.join(','),
+        text: options.message,
+      };
+
+      console.log('[Airtouch] Sending with username:', AIRTOUCH_USERNAME, 'password (md5):', getPassword());
 
       const response = await fetch(AIRTOUCH_API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString(),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
       });
 
       const text = await response.text();
       console.log(`[Airtouch] Response: ${text}`);
 
-      // Parse Airtouch response — typically returns status codes/JSON
+      // Parse Airtouch response
       if (response.ok) {
-        // Try parse as JSON first
-        let parsed: any;
+        let parsed: any = null;
         try {
           parsed = JSON.parse(text);
         } catch {
-          // Plain text response - treat as success if HTTP 200
           parsed = null;
         }
 
-        for (const phone of batch) {
-          results.push({ phone, status: 'sent', messageId: `at-${Date.now()}-${phone.slice(-4)}` });
-          hasSuccess = true;
+        // Airtouch returns status_code — "1000" means success
+        if (parsed && parsed.status_code && parsed.status_code !== '1000') {
+          for (const phone of batch) {
+            results.push({ phone, status: 'failed', error: `${parsed.status_code}: ${parsed.status_desc || 'Unknown error'}` });
+          }
+        } else {
+          for (const phone of batch) {
+            results.push({ phone, status: 'sent', messageId: parsed?.message_id || `at-${Date.now()}-${phone.slice(-4)}` });
+            hasSuccess = true;
+          }
         }
       } else {
         for (const phone of batch) {
@@ -135,6 +144,18 @@ export async function sendOTP(phone: string, otp: string): Promise<AirtouchRespo
     message: `Your myVote Kenya verification code is: ${otp}. This code expires in 10 minutes. Do not share this code with anyone.`,
     senderId: DEFAULT_SENDER_ID,
   });
+}
+
+/**
+ * Generate a random OTP
+ */
+export function generateOTP(length: number = 6): string {
+  const digits = '0123456789';
+  let otp = '';
+  for (let i = 0; i < length; i++) {
+    otp += digits[Math.floor(Math.random() * digits.length)];
+  }
+  return otp;
 }
 
 /**

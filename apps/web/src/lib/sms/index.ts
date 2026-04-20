@@ -3,6 +3,6 @@ export {
   sendOTP, 
   generateOTP, 
   normalizePhoneNumber,
-  type SendSMSOptions,
-  type SMSResponse 
-} from './africastalking';
+  type AirtouchSendOptions as SendSMSOptions,
+  type AirtouchResponse as SMSResponse 
+} from './airtouch';

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { normalizePhoneNumber } from '@/lib/sms/africastalking';
+import { normalizePhoneNumber } from '@/lib/sms/airtouch';
 import { verifyOTP as verifyStoredOTP, clearOTP } from '@/lib/auth/otp-store';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { cookies } from 'next/headers';

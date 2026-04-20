@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateOTP, sendOTP, normalizePhoneNumber } from '@/lib/sms/africastalking';
+import { generateOTP, sendOTP, normalizePhoneNumber } from '@/lib/sms/airtouch';
 import { sendOTPEmail, isValidEmail } from '@/lib/email';
 import { storeOTP, isRateLimited, trackOTPRequest } from '@/lib/auth/otp-store';
 
