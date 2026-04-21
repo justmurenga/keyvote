@@ -63,7 +63,11 @@ const POSITION_LABELS: Record<string, string> = {
 
 const POSITION_ORDER = ['president', 'governor', 'senator', 'women_rep', 'mp', 'mca'];
 
-const categoryIcons: Record<string, React.ReactNode> = {
+// Use JSX.Element instead of React.ReactNode to avoid a type clash between
+// the multiple @types/react versions hoisted in this monorepo (React 18.2 vs
+// 18.3). React.ReactNode in 18.3 includes `bigint`, which the Button child
+// slot typed against 18.2 doesn't accept, breaking `next build` type-check.
+const categoryIcons: Record<string, JSX.Element> = {
   messaging: <MessageSquare className="h-4 w-4" />,
   content: <FileText className="h-4 w-4" />,
   subscription: <Crown className="h-4 w-4" />,
