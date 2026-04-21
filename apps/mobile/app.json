@@ -17,7 +17,10 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#16a34a"
       },
-      "package": "com.myvote.kenya"
+      "package": "com.myvote.kenya",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "ios": {
       "supportsTablet": true,
@@ -26,16 +29,28 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow myVote to access your photos for evidence upload.",
+          "cameraPermission": "Allow myVote to use the camera to capture result sheet evidence."
+        }
+      ]
     ],
-    "platforms": ["ios", "android", "web"],
-    "newArchEnabled": true,
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "router": {
         "origin": false
+      },
+      "eas": {
+        "projectId": "4e4ecf08-bc25-4074-a7ed-da35548ffc83"
       }
     }
   }

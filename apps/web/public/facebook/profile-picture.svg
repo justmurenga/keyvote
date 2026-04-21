@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1E40AF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1E3A8A;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="ballotGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F3F4F6;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="8"/>
+      <feOffset dx="0" dy="4" result="offsetblur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.3"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Circle background -->
+  <circle cx="500" cy="500" r="500" fill="url(#bgGradient)"/>
+  
+  <!-- Decorative ring -->
+  <circle cx="500" cy="500" r="470" fill="none" stroke="#FFFFFF" stroke-width="3" opacity="0.2"/>
+
+  <!-- Kenyan flag accent at top -->
+  <g opacity="0.9">
+    <rect x="350" y="120" width="100" height="8" fill="#000000"/>
+    <rect x="350" y="130" width="100" height="8" fill="#FFFFFF"/>
+    <rect x="350" y="140" width="100" height="8" fill="#DC2626"/>
+    <rect x="350" y="150" width="100" height="8" fill="#FFFFFF"/>
+    <rect x="350" y="160" width="100" height="8" fill="#059669"/>
+    <!-- Flag pole position simulation -->
+    <rect x="550" y="120" width="100" height="8" fill="#000000"/>
+    <rect x="550" y="130" width="100" height="8" fill="#FFFFFF"/>
+    <rect x="550" y="140" width="100" height="8" fill="#DC2626"/>
+    <rect x="550" y="150" width="100" height="8" fill="#FFFFFF"/>
+    <rect x="550" y="160" width="100" height="8" fill="#059669"/>
+  </g>
+
+  <!-- Ballot Box Icon (Center) -->
+  <g transform="translate(500, 500)" filter="url(#shadow)">
+    <!-- Ballot box body -->
+    <rect x="-160" y="-60" width="320" height="220" rx="15" fill="url(#ballotGradient)"/>
+    <!-- Ballot box top -->
+    <rect x="-180" y="-100" width="360" height="50" rx="10" fill="#FFFFFF"/>
+    <!-- Ballot slot -->
+    <rect x="-80" y="-90" width="160" height="12" rx="3" fill="#1E40AF"/>
+    
+    <!-- Checkmark on ballot box -->
+    <circle cx="0" cy="50" r="50" fill="#059669"/>
+    <path d="M -22 50 L -5 67 L 25 35" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Ballot paper going in -->
+    <rect x="-30" y="-130" width="60" height="40" fill="#FFFFFF" stroke="#1E40AF" stroke-width="2" rx="3"/>
+    <line x1="-20" y1="-120" x2="20" y2="-120" stroke="#1E40AF" stroke-width="2"/>
+    <line x1="-20" y1="-110" x2="15" y2="-110" stroke="#1E40AF" stroke-width="2"/>
+    <line x1="-20" y1="-100" x2="20" y2="-100" stroke="#1E40AF" stroke-width="2"/>
+  </g>
+
+  <!-- Brand Text -->
+  <text x="500" y="780" text-anchor="middle" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="80" font-weight="900" letter-spacing="-2">myVote</text>
+  <text x="500" y="850" text-anchor="middle" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="600" opacity="0.95" letter-spacing="6">KENYA</text>
+  
+  <!-- Bottom accent line -->
+  <line x1="380" y1="880" x2="620" y2="880" stroke="#059669" stroke-width="4"/>
+</svg>

@@ -1,13 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   Pressable,
   Alert,
+  Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
@@ -16,11 +17,68 @@ import { useThemeStore } from '@/stores/theme-store';
 import { Avatar, Badge, Card, Button } from '@/components/ui';
 import { POSITION_LABELS, GENDER_LABELS } from '@/constants';
 import { FontSize, Spacing, BorderRadius } from '@/constants/theme';
+import {
+  isBiometricSupported,
+  isBiometricEnrolled,
+  isBiometricLoginEnabled,
+  getBiometricTypes,
+  getBiometricTypeName,
+} from '@/lib/biometric-auth';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const colors = useTheme();
-  const { profile, signOut, isAuthenticated } = useAuthStore();
+  const { profile, signOut, isAuthenticated, enableBiometric, disableBiometric } = useAuthStore();
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricType, setBiometricType] = useState('Biometric');
+  const [isBiometricLoading, setIsBiometricLoading] = useState(false);
+
+  useEffect(() => {
+    checkBiometricAvailability();
+  }, []);
+
+  const checkBiometricAvailability = async () => {
+    const supported = await isBiometricSupported();
+    const enrolled = await isBiometricEnrolled();
+    const enabled = await isBiometricLoginEnabled();
+    const types = await getBiometricTypes();
+    
+    setBiometricAvailable(supported && enrolled);
+    setBiometricEnabled(enabled);
+    setBiometricType(getBiometricTypeName(types));
+  };
+
+  const handleToggleBiometric = async (value: boolean) => {
+    if (!profile?.phone || !profile?.id) {
+      Alert.alert('Error', 'Unable to enable biometric login');
+      return;
+    }
+
+    setIsBiometricLoading(true);
+
+    if (value) {
+      const result = await enableBiometric(profile.phone, profile.id);
+      if (result.error) {
+        Alert.alert('Error', result.error);
+        setIsBiometricLoading(false);
+        return;
+      }
+      setBiometricEnabled(true);
+      Alert.alert('Success', `${biometricType} login enabled`);
+    } else {
+      const result = await disableBiometric();
+      if (result.error) {
+        Alert.alert('Error', result.error);
+        setIsBiometricLoading(false);
+        return;
+      }
+      setBiometricEnabled(false);
+      Alert.alert('Success', `${biometricType} login disabled`);
+    }
+
+    setIsBiometricLoading(false);
+  };
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -71,28 +129,73 @@ export default function ProfileScreen() {
     {
       title: 'Account',
       items: [
-        { icon: 'person-outline', label: 'Edit Profile', route: '' },
-        { icon: 'location-outline', label: 'Polling Station', route: '' },
-        { icon: 'shield-checkmark-outline', label: 'Verification', route: '' },
+        { icon: 'person-outline', label: 'Edit Profile', action: 'edit-profile' },
+        { icon: 'location-outline', label: 'Polling Station', action: 'polling-station' },
+        { icon: 'shield-checkmark-outline', label: 'Verification', action: 'verification' },
       ],
     },
     {
       title: 'Activity',
       items: [
-        { icon: 'heart-outline', label: 'Following', route: '' },
-        { icon: 'stats-chart-outline', label: 'My Votes', route: '' },
-        { icon: 'wallet-outline', label: 'Wallet', route: '' },
+        { icon: 'heart-outline', label: 'Following', action: 'following' },
+        { icon: 'stats-chart-outline', label: 'My Votes', action: 'my-votes' },
+        { icon: 'wallet-outline', label: 'Wallet', action: 'wallet' },
       ],
     },
     {
       title: 'Settings',
       items: [
-        { icon: 'notifications-outline', label: 'Notifications', route: '' },
-        { icon: 'help-circle-outline', label: 'Help & Support', route: '' },
-        { icon: 'document-text-outline', label: 'Terms & Privacy', route: '' },
+        { icon: 'notifications-outline', label: 'Notifications', action: 'notifications' },
+        { icon: 'help-circle-outline', label: 'Help & Support', action: 'help' },
+        { icon: 'document-text-outline', label: 'Terms & Privacy', action: 'terms' },
       ],
     },
   ];
+
+  const securityItems = biometricAvailable
+    ? [
+        {
+          icon: (biometricType.includes('Face') ? 'scan' : 'finger-print') as any,
+          label: `${biometricType} Login`,
+          action: 'biometric',
+          hasToggle: true,
+        },
+      ]
+    : [];
+
+  const handleMenuPress = (action: string) => {
+    switch (action) {
+      case 'edit-profile':
+        Alert.alert('Edit Profile', 'Profile editing coming soon!');
+        break;
+      case 'polling-station':
+        Alert.alert('Polling Station', 'Update your polling station information.');
+        break;
+      case 'verification':
+        Alert.alert('Verification', 'Verify your account details.');
+        break;
+      case 'following':
+        router.push('/(tabs)/candidates');
+        break;
+      case 'my-votes':
+        Alert.alert('My Votes', 'View your voting history.');
+        break;
+      case 'wallet':
+        Alert.alert('Wallet', 'Wallet feature coming soon!');
+        break;
+      case 'notifications':
+        Alert.alert('Notifications', 'Notification settings coming soon!');
+        break;
+      case 'help':
+        Alert.alert('Help & Support', 'Contact support at support@myvote.ke');
+        break;
+      case 'terms':
+        Alert.alert('Terms & Privacy', 'View our terms of service and privacy policy.');
+        break;
+      default:
+        Alert.alert('Coming Soon', 'This feature is coming soon!');
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -180,6 +283,43 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Security Section (Biometric) */}
+        {securityItems.length > 0 && (
+          <View style={styles.menuSection}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+              Security
+            </Text>
+            <View style={[styles.menuCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              {securityItems.map((item, idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.menuItem,
+                    idx < securityItems.length - 1 && {
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.borderLight,
+                    },
+                  ]}
+                >
+                  <Ionicons name={item.icon} size={20} color={colors.primary} />
+                  <Text style={[styles.menuLabel, { color: colors.text, flex: 1 }]}>
+                    {item.label}
+                  </Text>
+                  {item.hasToggle && (
+                    <Switch
+                      value={biometricEnabled}
+                      onValueChange={handleToggleBiometric}
+                      disabled={isBiometricLoading}
+                      trackColor={{ false: colors.border, true: colors.primaryFaded }}
+                      thumbColor={biometricEnabled ? colors.primary : colors.textTertiary}
+                    />
+                  )}
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
         {menuSections.map((section, si) => (
           <View key={si} style={styles.menuSection}>
             <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
@@ -189,6 +329,7 @@ export default function ProfileScreen() {
               {section.items.map((item, ii) => (
                 <Pressable
                   key={ii}
+                  onPress={() => handleMenuPress(item.action)}
                   style={({ pressed }) => [
                     styles.menuItem,
                     ii < section.items.length - 1 && {
@@ -232,7 +373,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: {
-    paddingBottom: Spacing['5xl'],
+    paddingBottom: 100,
   },
   header: {
     paddingHorizontal: Spacing.lg,

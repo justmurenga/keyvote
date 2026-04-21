@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "mobile": "pnpm --filter @myvote/mobile dev",
+    "mobile:clear": "pnpm --filter @myvote/mobile dev:clear",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",

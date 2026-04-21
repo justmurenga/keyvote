@@ -80,8 +80,10 @@ export function SiteHeader({ transparent = false }: SiteHeaderProps) {
 
         {/* Mobile Menu Button */}
         <button
+          type="button"
           className="md:hidden p-2"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-label="Toggle menu"
         >
           {mobileMenuOpen ? (
             <X className="h-6 w-6" />

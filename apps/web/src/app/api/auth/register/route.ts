@@ -32,7 +32,9 @@ export async function POST(request: NextRequest) {
     const verifiedIdentifier = isEmailBased ? normalizedEmail! : normalizedPhone!;
 
     // Check if identifier was verified via OTP
-    if (!isPhoneVerified(verifiedIdentifier)) {
+    const verified = isPhoneVerified(verifiedIdentifier);
+    if (!verified) {
+      console.log('Verification check failed for:', verifiedIdentifier);
       return NextResponse.json(
         { error: `${isEmailBased ? 'Email' : 'Phone number'} not verified. Please verify first.` },
         { status: 400 }

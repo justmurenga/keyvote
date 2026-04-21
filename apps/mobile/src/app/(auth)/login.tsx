@@ -17,20 +17,36 @@ import { Button, Input } from '@/components/ui';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/stores/auth-store';
 import { FontSize, Spacing, BorderRadius } from '@/constants/theme';
+import {
+  isBiometricSupported,
+  isBiometricEnrolled,
+  isBiometricLoginEnabled,
+  attemptBiometricLogin,
+  getBiometricTypes,
+  getBiometricTypeName,
+} from '@/lib/biometric-auth';
 
 type Step = 'phone' | 'otp';
 
 export default function LoginScreen() {
   const router = useRouter();
   const colors = useTheme();
-  const { sendOTP, verifyOTP } = useAuthStore();
+  const { sendOTP, verifyOTP, enableBiometric } = useAuthStore();
 
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricType, setBiometricType] = useState('Biometric');
+  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
   const otpInputs = useRef<(TextInput | null)[]>([]);
+
+  useEffect(() => {
+    checkBiometricAvailability();
+  }, []);
 
   useEffect(() => {
     if (countdown > 0) {
@@ -38,6 +54,55 @@ export default function LoginScreen() {
       return () => clearTimeout(timer);
     }
   }, [countdown]);
+
+  const checkBiometricAvailability = async () => {
+    const supported = await isBiometricSupported();
+    const enrolled = await isBiometricEnrolled();
+    const enabled = await isBiometricLoginEnabled();
+    const types = await getBiometricTypes();
+    
+    setBiometricAvailable(supported && enrolled);
+    setBiometricEnabled(enabled);
+    setBiometricType(getBiometricTypeName(types));
+  };
+
+  const handleBiometricLogin = async () => {
+    setIsLoading(true);
+    const result = await attemptBiometricLogin();
+    
+    if (result.success && result.credentials) {
+      // Re-authenticate with stored credentials
+      const { error, devOtp } = await sendOTP(result.credentials.phone);
+      
+      if (error) {
+        Alert.alert('Error', error);
+        setIsLoading(false);
+        return;
+      }
+
+      if (devOtp) {
+        // Auto-verify with dev OTP
+        const verifyResult = await verifyOTP(result.credentials.phone, devOtp, 'login');
+        setIsLoading(false);
+        
+        if (verifyResult.error) {
+          Alert.alert('Error', verifyResult.error);
+          return;
+        }
+        
+        router.replace('/(tabs)/home');
+      } else {
+        setIsLoading(false);
+        Alert.alert('Success', 'Please check your phone for the verification code');
+        setPhone(result.credentials.phone);
+        setStep('otp');
+        setCountdown(60);
+      }
+    } else {
+      setIsLoading(false);
+      Alert.alert('Authentication Failed', result.error || 'Please try again');
+    }
+  };
 
   const normalizePhone = (phoneNumber: string): string => {
     const cleaned = phoneNumber.replace(/\D/g, '');
@@ -112,7 +177,7 @@ export default function LoginScreen() {
 
     setIsLoading(true);
     const normalized = normalizePhone(phone);
-    const { error } = await verifyOTP(normalized, otpCode, 'login');
+    const { error, user } = await verifyOTP(normalized, otpCode, 'login');
     setIsLoading(false);
 
     if (error) {
@@ -120,7 +185,35 @@ export default function LoginScreen() {
       return;
     }
 
-    router.replace('/(tabs)/home');
+    // Ask if user wants to enable biometric login (only if not already enabled)
+    if (biometricAvailable && !biometricEnabled && user?.id) {
+      Alert.alert(
+        `Enable ${biometricType}?`,
+        `Use ${biometricType} for faster login next time?`,
+        [
+          {
+            text: 'Not Now',
+            style: 'cancel',
+            onPress: () => router.replace('/(tabs)/home'),
+          },
+          {
+            text: 'Enable',
+            onPress: async () => {
+              const result = await enableBiometric(normalized, user.id);
+              if (result.error) {
+                Alert.alert('Error', result.error);
+              } else {
+                Alert.alert('Success', `${biometricType} login enabled`);
+                setBiometricEnabled(true);
+              }
+              router.replace('/(tabs)/home');
+            },
+          },
+        ]
+      );
+    } else {
+      router.replace('/(tabs)/home');
+    }
   };
 
   const handleResend = async () => {
@@ -186,6 +279,38 @@ export default function LoginScreen() {
                 fullWidth
                 size="lg"
               />
+
+              {/* Biometric Login Option */}
+              {biometricAvailable && biometricEnabled && (
+                <>
+                  <View style={styles.divider}>
+                    <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                    <Text style={[styles.dividerText, { color: colors.textSecondary }]}>OR</Text>
+                    <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={handleBiometricLogin}
+                    disabled={isLoading}
+                    style={[
+                      styles.biometricButton,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={biometricType.includes('Face') ? 'scan' : 'finger-print'}
+                      size={24}
+                      color={colors.primary}
+                    />
+                    <Text style={[styles.biometricText, { color: colors.text }]}>
+                      Sign in with {biometricType}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           )}
 
@@ -335,5 +460,33 @@ const styles = StyleSheet.create({
   footerLink: {
     fontSize: FontSize.base,
     fontWeight: '700',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: Spacing['2xl'],
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    marginHorizontal: Spacing.md,
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+  },
+  biometricButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    gap: Spacing.md,
+  },
+  biometricText: {
+    fontSize: FontSize.base,
+    fontWeight: '600',
   },
 });

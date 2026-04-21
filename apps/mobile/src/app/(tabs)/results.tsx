@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   FlatList,
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { Badge, LoadingScreen, EmptyState, Avatar } from '@/components/ui';
@@ -67,7 +67,8 @@ export default function ResultsScreen() {
     loadResults();
   };
 
-  const formatNumber = (num: number) => {
+  const formatNumber = (num: number | undefined | null) => {
+    if (!num && num !== 0) return '0';
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(0)}K`;
     return num.toString();
@@ -260,7 +261,7 @@ const styles = StyleSheet.create({
   disclaimerText: { fontSize: FontSize.xs, flex: 1 },
   listContent: {
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing['5xl'],
+    paddingBottom: 100,
   },
   resultCard: {
     borderRadius: BorderRadius.xl,

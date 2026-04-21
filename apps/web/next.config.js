@@ -20,6 +20,17 @@ const nextConfig = {
       bodySizeLimit: '2mb',
     },
   },
+  webpack: (config, { isServer }) => {
+    // Ignore optional native dependencies that are not needed in browser
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        bufferutil: false,
+        'utf-8-validate': false,
+      };
+    }
+    return config;
+  },
   async headers() {
     return [
       {

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { API_BASE_URL } from '@/constants';
 import * as SecureStore from 'expo-secure-store';
 import type { Session, User } from '@supabase/supabase-js';
+import { enableBiometricLogin, disableBiometricLogin } from '@/lib/biometric-auth';
 
 interface UserProfile {
   id: string;
@@ -27,6 +28,7 @@ interface AuthState {
   session: Session | null;
   user: User | null;
   profile: UserProfile | null;
+  mobileAccessToken: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
 
@@ -45,6 +47,9 @@ interface AuthState {
   fetchProfile: (userId?: string) => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<{ error: string | null }>;
   setSession: (session: Session | null) => void;
+  getMobileAccessToken: () => string | null;
+  enableBiometric: (phone: string, userId: string) => Promise<{ error: string | null }>;
+  disableBiometric: () => Promise<{ error: string | null }>;
 
   // Keep for backward compat
   signInWithOTP: (phone: string) => Promise<{ error: string | null }>;
@@ -56,6 +61,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   user: null,
   profile: null,
+  mobileAccessToken: null,
   isLoading: true,
   isAuthenticated: false,
 
@@ -83,6 +89,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             set({
               isAuthenticated: true,
               user: { id: sessionData.userId } as any,
+              mobileAccessToken: sessionData.mobileAccessToken || null,
               profile: {
                 id: sessionData.userId,
                 phone: sessionData.phone,
@@ -156,6 +163,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           fullName: data.user.full_name,
           role: data.user.role,
           email: data.user.email,
+          mobileAccessToken: data.mobileAccessToken || null,
           expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
         };
         await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(sessionData));
@@ -163,6 +171,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({
           isAuthenticated: true,
           user: { id: data.user.id } as any,
+          mobileAccessToken: data.mobileAccessToken || null,
           profile: data.user as UserProfile,
         });
 
@@ -210,6 +219,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       session: null,
       user: null,
       profile: null,
+      mobileAccessToken: null,
       isAuthenticated: false,
     });
   },
@@ -259,5 +269,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user: session?.user ?? null,
       isAuthenticated: !!session,
     });
+  },
+
+  getMobileAccessToken: () => {
+    return get().mobileAccessToken;
+  },
+
+  enableBiometric: async (phone: string, userId: string) => {
+    try {
+      await enableBiometricLogin({ phone, userId });
+      return { error: null };
+    } catch (err: any) {
+      return { error: err.message || 'Failed to enable biometric login' };
+    }
+  },
+
+  disableBiometric: async () => {
+    try {
+      await disableBiometricLogin();
+      return { error: null };
+    } catch (err: any) {
+      return { error: err.message || 'Failed to disable biometric login' };
+    }
   },
 }));

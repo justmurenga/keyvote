@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
@@ -21,6 +21,7 @@ export default function HomeScreen() {
   const colors = useTheme();
   const { profile } = useAuthStore();
   const [refreshing, setRefreshing] = React.useState(false);
+  const isFieldRole = ['candidate', 'agent', 'admin', 'super_admin'].includes(profile?.role || 'voter');
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -64,6 +65,17 @@ export default function HomeScreen() {
       bg: colors.errorLight,
       route: '/(tabs)/profile' as const,
     },
+    ...(isFieldRole
+      ? [
+          {
+            icon: 'clipboard' as const,
+            label: 'Field Ops',
+            color: colors.info,
+            bg: colors.infoLight,
+            route: '/(tabs)/field-ops' as const,
+          },
+        ]
+      : []),
   ];
 
   const stats = [
@@ -206,7 +218,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.lg,
-    paddingBottom: Spacing['5xl'],
+    paddingBottom: 100,
   },
   header: {
     flexDirection: 'row',

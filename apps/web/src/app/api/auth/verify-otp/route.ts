@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { normalizePhoneNumber } from '@/lib/sms/airtouch';
 import { verifyOTP as verifyStoredOTP, clearOTP } from '@/lib/auth/otp-store';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createMobileAccessToken } from '@/lib/auth/mobile-token';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 
@@ -145,11 +146,14 @@ export async function POST(request: NextRequest) {
       };
 
       // Create response with session cookie
+      const mobileAccessToken = createMobileAccessToken(user.id, user.role);
+
       const response = NextResponse.json({
         success: true,
         message: 'Login successful',
         user: user,
         isNewUser: !existingUser,
+        mobileAccessToken,
         redirectTo: !existingUser ? '/dashboard/settings' : '/dashboard',
       });
 

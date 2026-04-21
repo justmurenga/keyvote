@@ -106,8 +106,11 @@ export async function sendSMS(options: AirtouchSendOptions): Promise<AirtouchRes
             results.push({ phone, status: 'failed', error: `${parsed.status_code}: ${parsed.status_desc || 'Unknown error'}` });
           }
         } else {
+          // Airtouch often returns message_id: null even on success.
+          // Generate a stable UUID-based ID so we can track delivery in our DB.
           for (const phone of batch) {
-            results.push({ phone, status: 'sent', messageId: parsed?.message_id || `at-${Date.now()}-${phone.slice(-4)}` });
+            const messageId = parsed?.message_id || `at-${crypto.randomUUID()}`;
+            results.push({ phone, status: 'sent', messageId });
             hasSuccess = true;
           }
         }
@@ -130,7 +133,7 @@ export async function sendSMS(options: AirtouchSendOptions): Promise<AirtouchRes
 
   return {
     success: hasSuccess,
-    messageId: `campaign-${Date.now()}`,
+    messageId: `campaign-${crypto.randomUUID()}`,
     responses: results,
   };
 }

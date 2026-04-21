@@ -38,23 +38,29 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_KE',
     url: 'https://myvote.ke',
-    title: 'myVote Kenya',
-    description: 'Kenya\'s premier election management platform',
+    title: 'myVote Kenya - Empowering Democracy',
+    description: 'Kenya\'s comprehensive election management platform. Follow candidates, participate in polls, track real-time election results. Available on Web, Mobile & USSD.',
     siteName: 'myVote Kenya',
     images: [
       {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'myVote Kenya',
+        alt: 'myVote Kenya - Empowering Democracy',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'myVote Kenya',
-    description: 'Kenya\'s premier election management platform',
+    title: 'myVote Kenya - Empowering Democracy',
+    description: 'Kenya\'s comprehensive election management platform. Follow candidates, participate in polls, track real-time election results.',
     images: ['/og-image.png'],
+    creator: '@myvotekenya',
+    site: '@myvotekenya',
+  },
+  // Facebook specific meta tags
+  other: {
+    'fb:app_id': process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || '',
   },
   manifest: '/manifest.json',
   icons: {

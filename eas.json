@@ -1,0 +1,35 @@
+{
+  "cli": {
+    "version": ">= 13.2.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ylopcncltjiplmysdmgs.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlsb3BjbmNsdGppcGxteXNkbWdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNDY4MjMsImV4cCI6MjA5MTcyMjgyM30.WTzFOIJU6XYxOdi-WRdM35bRROLT3ZD0G_HqjhTZEUg",
+        "EXPO_PUBLIC_API_URL": "http://192.168.100.31:3000"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

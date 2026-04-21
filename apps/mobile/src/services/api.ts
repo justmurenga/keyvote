@@ -1,5 +1,30 @@
 import { supabase } from '@/lib/supabase';
 import { API_BASE_URL } from '@/constants';
+import { useAuthStore } from '@/stores/auth-store';
+
+function getMobileUserId() {
+  const state = useAuthStore.getState();
+  return state.profile?.id || state.user?.id || null;
+}
+
+function getMobileHeaders() {
+  const state = useAuthStore.getState();
+  const userId = getMobileUserId();
+  const token = state.getMobileAccessToken();
+
+  const headers: Record<string, string> = {};
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  // Development fallback for local environments.
+  if (!token && userId) {
+    headers['x-myvote-user-id'] = userId;
+  }
+
+  return headers;
+}
 
 // ============================================================================
 // Candidates API
@@ -159,6 +184,26 @@ export async function fetchPolls(params: {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data || [];
+}
+
+export async function fetchPollById(id: string): Promise<Poll> {
+  const { data, error } = await supabase
+    .from('polls')
+    .select(`
+      *,
+      options:poll_options(
+        *,
+        candidate:candidates(
+          id,
+          user:users!candidates_user_id_fkey(full_name, profile_photo_url),
+          party:political_parties(abbreviation, color)
+        )
+      )
+    `)
+    .eq('id', id)
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Poll;
 }
 
 export async function votePoll(pollId: string, optionId: string) {
@@ -332,4 +377,117 @@ export async function isFollowingCandidate(candidateId: string): Promise<boolean
     .single();
 
   return data?.is_following ?? false;
+}
+
+// ============================================================================
+// Candidate Portal + Election Day Field Ops API
+// ============================================================================
+
+export interface CandidatePortalSummary {
+  pendingAssignments: number;
+  submittedResults: number;
+  approvedResults: number;
+  flaggedResults: number;
+}
+
+export interface PollingStationAssignment {
+  id: string;
+  polling_station_id: string;
+  polling_station_name: string;
+  polling_station_code: string;
+  ward_name?: string | null;
+  constituency_name?: string | null;
+  county_name?: string | null;
+  due_at?: string | null;
+  status: 'pending' | 'in_progress' | 'submitted' | 'approved' | 'rejected';
+}
+
+export interface ElectionDaySubmission {
+  id: string;
+  assignment_id?: string | null;
+  polling_station_code: string;
+  position: string;
+  official_form_reference: string;
+  evidence_url: string;
+  announced_at: string;
+  status: 'draft' | 'submitted' | 'flagged' | 'approved' | 'rejected';
+  reviewer_comments?: string | null;
+  timeline?: Array<{
+    status: 'submitted' | 'flagged' | 'approved' | 'rejected';
+    at: string;
+    comment?: string | null;
+  }>;
+  created_at: string;
+}
+
+export interface ElectionDaySubmissionPayload {
+  assignment_id?: string;
+  polling_station_code: string;
+  position: string;
+  official_form_reference: string;
+  announced_at: string;
+  evidence_url: string;
+  notes?: string;
+  tallies: Array<{
+    candidate_id?: string;
+    candidate_name?: string;
+    votes: number;
+  }>;
+}
+
+export async function fetchCandidatePortalSummary(): Promise<CandidatePortalSummary> {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/candidate/summary`, {
+    headers: getMobileHeaders(),
+  });
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || 'Failed to fetch candidate summary');
+  }
+
+  return data?.summary;
+}
+
+export async function fetchFieldAssignments(): Promise<PollingStationAssignment[]> {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/field/assignments`, {
+    headers: getMobileHeaders(),
+  });
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || 'Failed to fetch field assignments');
+  }
+
+  return data?.assignments || [];
+}
+
+export async function fetchMyResultSubmissions(): Promise<ElectionDaySubmission[]> {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/field/submissions`, {
+    headers: getMobileHeaders(),
+  });
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || 'Failed to fetch submissions');
+  }
+
+  return data?.submissions || [];
+}
+
+export async function submitPollingStationResult(payload: ElectionDaySubmissionPayload) {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/field/submissions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getMobileHeaders(),
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || 'Failed to submit polling station result');
+  }
+
+  return data;
 }

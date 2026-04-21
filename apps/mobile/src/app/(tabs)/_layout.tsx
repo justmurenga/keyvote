@@ -2,9 +2,12 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
+import { useAuthStore } from '@/stores/auth-store';
 
 export default function TabLayout() {
   const colors = useTheme();
+  const role = useAuthStore((s) => s.profile?.role || 'voter');
+  const showFieldOps = ['candidate', 'agent', 'admin', 'super_admin'].includes(role);
 
   return (
     <Tabs
@@ -16,7 +19,6 @@ export default function TabLayout() {
           backgroundColor: colors.tabBar,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 60,
           paddingBottom: 8,
           paddingTop: 8,
         },
@@ -59,6 +61,16 @@ export default function TabLayout() {
           title: 'Results',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="bar-chart" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="field-ops"
+        options={{
+          href: showFieldOps ? undefined : null,
+          title: 'Field Ops',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="clipboard" size={size} color={color} />
           ),
         }}
       />

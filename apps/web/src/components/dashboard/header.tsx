@@ -128,7 +128,7 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
                     <hr className="my-2" />
                     <button
                       onClick={handleLogout}
-                      className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-muted w-full text-left text-destructive"
+                      className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-destructive/10 w-full text-left text-red-600 dark:text-red-400"
                     >
                       <LogOut className="h-4 w-4" />
                       Sign Out
