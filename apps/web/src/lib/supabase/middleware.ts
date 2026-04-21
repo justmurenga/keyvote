@@ -33,8 +33,16 @@ const publicRoutes = [
 ];
 
 // Routes that should redirect to dashboard if already authenticated
-// DISABLED for now to prevent redirect loops
-const authRoutes: string[] = [];
+const authRoutes: string[] = ['/auth/login', '/auth/register'];
+
+// Public pages that have a dashboard equivalent. Authenticated users must
+// always be sent to the dashboard version so they get the sidebar navigation
+// and a single source-of-truth experience.
+const publicToDashboardMap: Array<{ from: RegExp; to: (path: string) => string }> = [
+  { from: /^\/candidates(\/.*)?$/, to: (p) => `/dashboard${p}` },
+  { from: /^\/polls(\/.*)?$/, to: (p) => `/dashboard${p}` },
+  { from: /^\/results(\/.*)?$/, to: (p) => `/dashboard${p}` },
+];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
@@ -118,6 +126,20 @@ export async function updateSession(request: NextRequest) {
   // Redirect authenticated users away from auth pages
   if (isAuthenticated && isAuthRoute) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+
+  // Redirect authenticated users away from public pages that have a dashboard
+  // equivalent so they always experience the app inside the dashboard shell
+  // (with sidebar navigation). Single source of truth = /dashboard/*.
+  if (isAuthenticated) {
+    for (const rule of publicToDashboardMap) {
+      if (rule.from.test(pathname)) {
+        const target = rule.to(pathname);
+        const url = new URL(target, request.url);
+        url.search = request.nextUrl.search;
+        return NextResponse.redirect(url);
+      }
+    }
   }
 
   // Redirect unauthenticated users to login for protected routes

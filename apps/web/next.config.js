@@ -2,7 +2,6 @@
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@myvote/database', '@myvote/shared'],
-  turbopack: {},
   images: {
     remotePatterns: [
       {

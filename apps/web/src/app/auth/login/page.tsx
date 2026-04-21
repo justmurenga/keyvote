@@ -11,6 +11,30 @@ import { createClient } from '@/lib/supabase/client';
 type Step = 'identifier' | 'otp';
 type AuthMethod = 'phone' | 'email';
 
+// Mapping of public-facing routes that have a dashboard equivalent. After
+// login users must always end up inside the dashboard shell (sidebar nav)
+// regardless of where they were before authenticating.
+const PUBLIC_TO_DASHBOARD: Array<[RegExp, (path: string) => string]> = [
+  [/^\/candidates(\/.*)?$/, (p) => `/dashboard${p}`],
+  [/^\/polls(\/.*)?$/, (p) => `/dashboard${p}`],
+  [/^\/results(\/.*)?$/, (p) => `/dashboard${p}`],
+];
+
+function normalizePostLoginRedirect(target: string): string {
+  if (!target || !target.startsWith('/')) return '/dashboard';
+  // Never redirect back to auth pages after login
+  if (target.startsWith('/auth')) return '/dashboard';
+  // Marketing / static pages shouldn't be the post-login landing page
+  if (['/', '/about', '/faq', '/privacy', '/terms', '/contact'].includes(target)) {
+    return '/dashboard';
+  }
+  // Map any duplicated public page to its dashboard equivalent
+  for (const [pattern, mapper] of PUBLIC_TO_DASHBOARD) {
+    if (pattern.test(target)) return mapper(target);
+  }
+  return target;
+}
+
 function LoginPageContent() {
   const [step, setStep] = useState<Step>('identifier');
   const [authMethod, setAuthMethod] = useState<AuthMethod>('phone');
@@ -29,7 +53,7 @@ function LoginPageContent() {
 
   // Show success message if just registered
   useEffect(() => {
-    if (searchParams.get('registered') === 'true') {
+    if (searchParams?.get('registered') === 'true') {
       toast({
         title: 'Account created!',
         description: 'Please log in with your phone number.',
@@ -200,8 +224,13 @@ function LoginPageContent() {
         description: `Logged in as ${verifyData.user?.full_name || 'User'}`,
       });
 
-      // Determine redirect destination: use searchParams redirect or API response or default
-      const redirectTo = searchParams.get('redirect') || verifyData.redirectTo || '/dashboard';
+      // Determine redirect destination. Single source of truth: every
+      // authenticated experience lives under /dashboard. If the requested
+      // redirect points to a public-facing page that has a dashboard
+      // equivalent (or to an auth page), rewrite it to the dashboard route
+      // so the user always lands inside the sidebar-navigated shell.
+      const requestedRedirect = searchParams?.get('redirect') || verifyData.redirectTo || '/dashboard';
+      const redirectTo = normalizePostLoginRedirect(requestedRedirect);
 
       // Use window.location for hard redirect to ensure cookies are sent on new request
       window.location.href = redirectTo;

@@ -54,7 +54,7 @@ type DrillLevel = 'county' | 'constituency' | 'ward';
 export default function PollDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const pollId = params.id as string;
+  const pollId = params?.id as string;
 
   const [poll, setPoll] = useState<PollDetail | null>(null);
   const [results, setResults] = useState<ResultsResponse | null>(null);

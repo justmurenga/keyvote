@@ -60,7 +60,7 @@ interface SiteHeaderProps {
 }
 
 export function SiteHeader({ transparent = false }: SiteHeaderProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme, setTheme } = useTheme();

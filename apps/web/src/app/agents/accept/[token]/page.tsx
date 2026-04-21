@@ -53,7 +53,7 @@ const REGION_TYPE_LABELS: Record<string, string> = {
 export default function AcceptAgentInvitationPage() {
   const params = useParams();
   const router = useRouter();
-  const token = params.token as string;
+  const token = params?.token as string;
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   const [invitation, setInvitation] = useState<InvitationData | null>(null);

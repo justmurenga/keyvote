@@ -57,7 +57,7 @@ interface AdminSidebarProps {
 }
 
 export function AdminSidebar({ initialRole, children }: AdminSidebarProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const { can } = usePermissions();
 
   // Optimistic filter: while client-side permissions hook is still loading, fall

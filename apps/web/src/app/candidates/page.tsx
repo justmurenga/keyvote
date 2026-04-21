@@ -34,9 +34,9 @@ function CandidatesPageContent() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   
-  const [search, setSearch] = useState(searchParams.get('search') || '');
-  const [position, setPosition] = useState(searchParams.get('position') || 'all');
-  const [page, setPage] = useState(parseInt(searchParams.get('page') || '1'));
+  const [search, setSearch] = useState(searchParams?.get('search') || '');
+  const [position, setPosition] = useState(searchParams?.get('position') || 'all');
+  const [page, setPage] = useState(parseInt(searchParams?.get('page') || '1'));
 
   useEffect(() => {
     fetchCandidates();

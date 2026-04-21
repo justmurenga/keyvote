@@ -53,6 +53,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard/candidate/analytics', label: 'Follower Analytics', icon: PieChart, roles: ['candidate'] },
   { href: '/dashboard/candidate/agents', label: 'My Agents', icon: Shield, roles: ['candidate'] },
   { href: '/dashboard/candidate/messages', label: 'Agent Messages', icon: MessageSquare, roles: ['candidate'] },
+  { href: '/dashboard/candidate/sms', label: 'Bulk SMS', icon: Send, roles: ['candidate'] },
   { href: '/dashboard/candidate/results', label: 'My Results', icon: Vote, roles: ['candidate'] },
 
   // Legacy links for candidates (also shown)
@@ -72,7 +73,7 @@ interface DashboardNavProps {
 }
 
 export function DashboardNav({ role }: DashboardNavProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const filteredItems = navItems.filter(

@@ -70,7 +70,7 @@ type DrillLevel = 'county' | 'constituency' | 'ward';
 
 export default function AdminPollResultsPage() {
   const params = useParams();
-  const pollId = params.id as string;
+  const pollId = params?.id as string;
 
   const [poll, setPoll] = useState<PollDetail | null>(null);
   const [candidateResults, setCandidateResults] = useState<CandidateResult[]>([]);

@@ -75,12 +75,12 @@ export default function CandidateProfilePage() {
 
   useEffect(() => {
     fetchCandidate();
-  }, [params.id]);
+  }, [params?.id]);
 
   const fetchCandidate = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/candidates/${params.id}`);
+      const response = await fetch(`/api/candidates/${params?.id}`);
       const data = await response.json();
 
       if (response.ok) {
