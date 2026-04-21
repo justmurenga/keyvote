@@ -261,6 +261,22 @@ You will receive updates via SMS.`;
 
     const userData = user as Tables['users']['Row'];
 
+    // Eligibility gate: only users with verified details and a
+    // configured polling station / location can participate in polls.
+    if ((userData as any).is_active === false) {
+      return 'END Your account is not active. Please contact support.';
+    }
+    if (!(userData as any).is_verified) {
+      return `END Please verify your account details before voting.
+
+Visit myvote.ke or dial *XXX# to complete verification.`;
+    }
+    if (!(userData as any).polling_station_id) {
+      return `END Please set your polling station / location in your profile before voting.
+
+Visit myvote.ke to update your location.`;
+    }
+
     // Get active polls
     const { data: polls } = await this.supabase
       .from('polls')

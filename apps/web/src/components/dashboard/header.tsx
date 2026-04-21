@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Vote, Bell, Menu, User, LogOut, Settings, Moon, Sun } from 'lucide-react';
+import { Vote, Menu, User, LogOut, Settings, Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase/client';
 import { useState } from 'react';
+import { NotificationsBell } from './notifications-bell';
 
 interface DashboardHeaderProps {
   user: {
@@ -81,12 +82,7 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
           </Button>
 
           {/* Notifications */}
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-5 w-5" />
-            <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center">
-              3
-            </span>
-          </Button>
+          <NotificationsBell />
 
           {/* User menu */}
           <div className="relative">

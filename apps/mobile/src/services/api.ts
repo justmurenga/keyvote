@@ -210,6 +210,29 @@ export async function votePoll(pollId: string, optionId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
+  // Eligibility gate: only verified users with a location set can vote.
+  const { data: voter, error: voterError } = await supabase
+    .from('users')
+    .select('is_verified, is_active, polling_station_id')
+    .eq('id', user.id)
+    .single();
+
+  if (voterError || !voter) {
+    throw new Error('Voter profile not found. Please complete your registration.');
+  }
+
+  const v = voter as { is_verified: boolean | null; is_active: boolean | null; polling_station_id: string | null };
+
+  if (v.is_active === false) {
+    throw new Error('Your account is not active. Please contact support.');
+  }
+  if (!v.is_verified) {
+    throw new Error('Please verify your account details before voting.');
+  }
+  if (!v.polling_station_id) {
+    throw new Error('Please set your polling station / location in your profile before voting.');
+  }
+
   const { error } = await supabase
     .from('poll_votes')
     .insert({

@@ -47,7 +47,7 @@ const AGE_BRACKET_OPTIONS = [
 
 interface ProfileData {
   id: string;
-  phone: string;
+  phone: string | null;
   email: string | null;
   full_name: string;
   gender: string | null;
@@ -109,6 +109,23 @@ export default function ProfilePage() {
   });
   const [pollingStationName, setPollingStationName] = useState('');
 
+  // Phone verification flow state (used when the user signed up with email
+  // and needs to add + verify a phone number to complete their profile).
+  const [phoneInput, setPhoneInput] = useState('');
+  const [phoneOtp, setPhoneOtp] = useState('');
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [pendingPhone, setPendingPhone] = useState('');
+  const [isSendingPhoneOtp, setIsSendingPhoneOtp] = useState(false);
+  const [isVerifyingPhoneOtp, setIsVerifyingPhoneOtp] = useState(false);
+
+  // Email verification flow state (mirrors the phone flow above).
+  const [emailInput, setEmailInput] = useState('');
+  const [emailOtp, setEmailOtp] = useState('');
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
+  const [isVerifyingEmailOtp, setIsVerifyingEmailOtp] = useState(false);
+
   // Fetch profile on mount
   useEffect(() => {
     fetchProfile();
@@ -166,14 +183,6 @@ export default function ProfilePage() {
 
       if (formData.full_name && formData.full_name !== profile?.full_name) {
         payload.full_name = formData.full_name;
-      }
-      if (formData.email) {
-        const currentEmail = profile?.email?.endsWith('@myvote.ke')
-          ? ''
-          : profile?.email || '';
-        if (formData.email !== currentEmail) {
-          payload.email = formData.email;
-        }
       }
       if (formData.gender && formData.gender !== profile?.gender) {
         payload.gender = formData.gender;
@@ -238,6 +247,172 @@ export default function ProfilePage() {
   const handlePollingStationSelect = (stationId: string, stationName: string) => {
     setFormData((prev) => ({ ...prev, polling_station_id: stationId }));
     setPollingStationName(stationName);
+  };
+
+  const handleSendPhoneOtp = async () => {
+    if (!phoneInput.trim()) {
+      toast({
+        title: 'Phone required',
+        description: 'Please enter a phone number first.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setIsSendingPhoneOtp(true);
+    try {
+      const res = await fetch('/api/profile/phone/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ phone: phoneInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to send code');
+      }
+      setPendingPhone(data.phone || phoneInput.trim());
+      setPhoneOtpSent(true);
+      toast({
+        title: 'Code sent',
+        description: `We sent a 6-digit code to ${data.phone || phoneInput.trim()}.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Could not send code',
+        description: error.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSendingPhoneOtp(false);
+    }
+  };
+
+  const handleVerifyPhoneOtp = async () => {
+    if (!phoneOtp.trim() || phoneOtp.trim().length < 4) {
+      toast({
+        title: 'Code required',
+        description: 'Please enter the verification code.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setIsVerifyingPhoneOtp(true);
+    try {
+      const res = await fetch('/api/profile/phone/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          phone: pendingPhone || phoneInput.trim(),
+          otp: phoneOtp.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to verify code');
+      }
+      toast({
+        title: 'Phone verified',
+        description: 'Your phone number has been added to your profile.',
+      });
+      setPhoneInput('');
+      setPhoneOtp('');
+      setPhoneOtpSent(false);
+      setPendingPhone('');
+      await fetchProfile();
+      router.refresh();
+    } catch (error: any) {
+      toast({
+        title: 'Verification failed',
+        description: error.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsVerifyingPhoneOtp(false);
+    }
+  };
+
+  const handleSendEmailOtp = async () => {
+    if (!emailInput.trim()) {
+      toast({
+        title: 'Email required',
+        description: 'Please enter an email address first.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setIsSendingEmailOtp(true);
+    try {
+      const res = await fetch('/api/profile/email/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ email: emailInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to send code');
+      }
+      setPendingEmail(data.email || emailInput.trim());
+      setEmailOtpSent(true);
+      toast({
+        title: 'Code sent',
+        description: `We sent a 6-digit code to ${data.email || emailInput.trim()}.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Could not send code',
+        description: error.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSendingEmailOtp(false);
+    }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    if (!emailOtp.trim() || emailOtp.trim().length < 4) {
+      toast({
+        title: 'Code required',
+        description: 'Please enter the verification code.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setIsVerifyingEmailOtp(true);
+    try {
+      const res = await fetch('/api/profile/email/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          email: pendingEmail || emailInput.trim(),
+          otp: emailOtp.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to verify code');
+      }
+      toast({
+        title: 'Email verified',
+        description: 'Your email has been added to your profile.',
+      });
+      setEmailInput('');
+      setEmailOtp('');
+      setEmailOtpSent(false);
+      setPendingEmail('');
+      await fetchProfile();
+      router.refresh();
+    } catch (error: any) {
+      toast({
+        title: 'Verification failed',
+        description: error.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsVerifyingEmailOtp(false);
+    }
   };
 
   if (isLoading) {
@@ -502,39 +677,111 @@ export default function ProfilePage() {
                 <Label className="flex items-center gap-2 mb-2">
                   <Mail className="h-4 w-4 text-muted-foreground" />
                   Email Address
-                  {(isAutoEmail || !profile.email) && (
+                  {profile.email && !isAutoEmail ? (
+                    <Badge variant="success" className="text-xs">
+                      Verified
+                    </Badge>
+                  ) : (
                     <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
                       Missing
                     </Badge>
                   )}
                 </Label>
-                {isEditing ? (
-                  <Input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        email: e.target.value,
-                      }))
-                    }
-                    placeholder="your.email@example.com"
-                  />
+                {profile.email && !isAutoEmail ? (
+                  <div>
+                    <p className="text-sm font-medium">{profile.email}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Email address cannot be changed once verified.
+                    </p>
+                  </div>
                 ) : (
-                  <p className="text-sm">
-                    {isAutoEmail ? (
-                      <span className="text-muted-foreground italic">
-                        No email provided
-                      </span>
+                  <div className="space-y-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 p-3">
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                      Add and verify an email address to complete your profile and
+                      enable email notifications.
+                    </p>
+                    {!emailOtpSent ? (
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Input
+                          type="email"
+                          inputMode="email"
+                          placeholder="your.email@example.com"
+                          value={emailInput}
+                          onChange={(e) => setEmailInput(e.target.value)}
+                          className="sm:flex-1"
+                          disabled={isSendingEmailOtp}
+                        />
+                        <Button
+                          onClick={handleSendEmailOtp}
+                          disabled={isSendingEmailOtp || !emailInput.trim()}
+                        >
+                          {isSendingEmailOtp ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Sending...
+                            </>
+                          ) : (
+                            'Send code'
+                          )}
+                        </Button>
+                      </div>
                     ) : (
-                      profile.email || '—'
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground">
+                          We sent a 6-digit code to{' '}
+                          <span className="font-medium">{pendingEmail}</span>.
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            placeholder="6-digit code"
+                            value={emailOtp}
+                            onChange={(e) =>
+                              setEmailOtp(e.target.value.replace(/\D/g, ''))
+                            }
+                            className="sm:flex-1"
+                            disabled={isVerifyingEmailOtp}
+                          />
+                          <Button
+                            onClick={handleVerifyEmailOtp}
+                            disabled={isVerifyingEmailOtp || emailOtp.length < 4}
+                          >
+                            {isVerifyingEmailOtp ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Verifying...
+                              </>
+                            ) : (
+                              'Verify & save'
+                            )}
+                          </Button>
+                        </div>
+                        <div className="flex gap-3 text-xs">
+                          <button
+                            type="button"
+                            className="text-primary hover:underline disabled:opacity-50"
+                            onClick={handleSendEmailOtp}
+                            disabled={isSendingEmailOtp}
+                          >
+                            Resend code
+                          </button>
+                          <button
+                            type="button"
+                            className="text-muted-foreground hover:underline"
+                            onClick={() => {
+                              setEmailOtpSent(false);
+                              setEmailOtp('');
+                              setPendingEmail('');
+                            }}
+                          >
+                            Use a different email
+                          </button>
+                        </div>
+                      </div>
                     )}
-                  </p>
-                )}
-                {isEditing && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Optional. Used for email notifications and account recovery.
-                  </p>
+                  </div>
                 )}
               </div>
 
@@ -711,20 +958,117 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <div>
+                <div className="md:col-span-2">
                   <Label className="flex items-center gap-2 mb-2">
                     <Phone className="h-4 w-4 text-muted-foreground" />
                     Phone Number
+                    {!profile.phone && (
+                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                        Missing
+                      </Badge>
+                    )}
                   </Label>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium">{profile.phone}</p>
-                    <Badge variant="success" className="text-xs">
-                      Verified
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Phone number cannot be changed
-                  </p>
+                  {profile.phone ? (
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{profile.phone}</p>
+                        <Badge variant="success" className="text-xs">
+                          Verified
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Phone number cannot be changed once verified.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 p-3">
+                      <p className="text-sm text-amber-800 dark:text-amber-200">
+                        Add and verify a phone number to complete your profile and
+                        receive SMS notifications.
+                      </p>
+                      {!phoneOtpSent ? (
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Input
+                            type="tel"
+                            inputMode="tel"
+                            placeholder="07XX XXX XXX"
+                            value={phoneInput}
+                            onChange={(e) => setPhoneInput(e.target.value)}
+                            className="sm:flex-1"
+                            disabled={isSendingPhoneOtp}
+                          />
+                          <Button
+                            onClick={handleSendPhoneOtp}
+                            disabled={isSendingPhoneOtp || !phoneInput.trim()}
+                          >
+                            {isSendingPhoneOtp ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Sending...
+                              </>
+                            ) : (
+                              'Send code'
+                            )}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground">
+                            We sent a 6-digit code to{' '}
+                            <span className="font-medium">{pendingPhone}</span>.
+                          </p>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={6}
+                              placeholder="6-digit code"
+                              value={phoneOtp}
+                              onChange={(e) =>
+                                setPhoneOtp(e.target.value.replace(/\D/g, ''))
+                              }
+                              className="sm:flex-1"
+                              disabled={isVerifyingPhoneOtp}
+                            />
+                            <Button
+                              onClick={handleVerifyPhoneOtp}
+                              disabled={isVerifyingPhoneOtp || phoneOtp.length < 4}
+                            >
+                              {isVerifyingPhoneOtp ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  Verifying...
+                                </>
+                              ) : (
+                                'Verify & save'
+                              )}
+                            </Button>
+                          </div>
+                          <div className="flex gap-3 text-xs">
+                            <button
+                              type="button"
+                              className="text-primary hover:underline disabled:opacity-50"
+                              onClick={handleSendPhoneOtp}
+                              disabled={isSendingPhoneOtp}
+                            >
+                              Resend code
+                            </button>
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:underline"
+                              onClick={() => {
+                                setPhoneOtpSent(false);
+                                setPhoneOtp('');
+                                setPendingPhone('');
+                              }}
+                            >
+                              Use a different number
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>

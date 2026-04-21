@@ -25,6 +25,51 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Eligibility gate: only users who have verified their details
+    // and set their location (polling station) can participate in polls.
+    const { data: voter, error: voterError } = await supabase
+      .from('users')
+      .select('is_verified, is_active, polling_station_id')
+      .eq('id', userId)
+      .single() as {
+        data: { is_verified: boolean | null; is_active: boolean | null; polling_station_id: string | null } | null;
+        error: any;
+      };
+
+    if (voterError || !voter) {
+      return NextResponse.json(
+        { error: 'Voter profile not found' },
+        { status: 403 }
+      );
+    }
+
+    if (voter.is_active === false) {
+      return NextResponse.json(
+        { error: 'Your account is not active. Please contact support.', code: 'voter_inactive' },
+        { status: 403 }
+      );
+    }
+
+    if (!voter.is_verified) {
+      return NextResponse.json(
+        {
+          error: 'Please verify your account details before voting.',
+          code: 'voter_not_verified',
+        },
+        { status: 403 }
+      );
+    }
+
+    if (!voter.polling_station_id) {
+      return NextResponse.json(
+        {
+          error: 'Please set your polling station / location in your profile before voting.',
+          code: 'voter_location_missing',
+        },
+        { status: 403 }
+      );
+    }
+
     // Check if poll exists and is active
     const { data: poll, error: pollError } = await supabase
       .from('polls')
@@ -116,6 +161,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { error: 'You have already voted in this poll' },
           { status: 400 }
+        );
+      }
+
+      // Eligibility trigger raised a check_violation
+      if (voteError.code === '23514' || /not verified|not active|polling station/i.test(voteError.message || '')) {
+        return NextResponse.json(
+          { error: voteError.message || 'You are not eligible to vote yet', code: voteError.hint || 'voter_ineligible' },
+          { status: 403 }
         );
       }
       
