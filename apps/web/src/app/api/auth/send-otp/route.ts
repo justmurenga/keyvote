@@ -2,15 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateOTP, sendOTP, normalizePhoneNumber } from '@/lib/sms/airtouch';
 import { sendOTPEmail, isValidEmail } from '@/lib/email';
 import { storeOTP, isRateLimited, trackOTPRequest } from '@/lib/auth/otp-store';
+import { createAdminClient } from '@/lib/supabase/admin';
 
-
+type Action = 'login' | 'register';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { phone, email } = body;
+    const { phone, email, action: rawAction } = body as {
+      phone?: string;
+      email?: string;
+      action?: Action;
+    };
 
-    // Must provide either phone or email
+    const action: Action = rawAction === 'register' ? 'register' : 'login';
+
     if (!phone && !email) {
       return NextResponse.json(
         { error: 'Phone number or email address is required' },
@@ -18,37 +24,79 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // --- EMAIL-BASED OTP ---
+    // Normalize identifier
+    let identifier: string;
+    let isEmailBased = false;
+
     if (email) {
       const normalizedEmail = email.trim().toLowerCase();
-
       if (!isValidEmail(normalizedEmail)) {
         return NextResponse.json(
           { error: 'Please enter a valid email address' },
           { status: 400 }
         );
       }
-
-      // Check rate limiting
-      if (isRateLimited(normalizedEmail)) {
+      identifier = normalizedEmail;
+      isEmailBased = true;
+    } else {
+      const normalizedPhone = normalizePhoneNumber(phone!);
+      const phoneRegex = /^\+254[17]\d{8}$/;
+      if (!phoneRegex.test(normalizedPhone)) {
         return NextResponse.json(
-          { error: 'Too many OTP requests. Please try again later.' },
-          { status: 429 }
+          { error: 'Please enter a valid Kenyan phone number' },
+          { status: 400 }
         );
       }
+      identifier = normalizedPhone;
+    }
 
-      // Generate OTP
-      const otp = generateOTP(6);
+    // --- Pre-flight existence check, BEFORE sending OTP ---
+    // This makes the messaging consistent: we never send an OTP and *then*
+    // tell the user "user not found".
+    const adminClient = createAdminClient();
+    const column = isEmailBased ? 'email' : 'phone';
+    const { data: existingUser } = await adminClient
+      .from('users')
+      .select('id')
+      .eq(column, identifier)
+      .maybeSingle();
 
-      // Store OTP keyed by email
-      storeOTP(normalizedEmail, otp, 10);
+    if (action === 'login' && !existingUser) {
+      return NextResponse.json(
+        {
+          error: `No account found with this ${isEmailBased ? 'email address' : 'phone number'}. Please create an account first.`,
+          needsRegistration: true,
+        },
+        { status: 404 }
+      );
+    }
 
-      // Track request for rate limiting
-      trackOTPRequest(normalizedEmail);
+    if (action === 'register' && existingUser) {
+      return NextResponse.json(
+        {
+          error: `An account with this ${isEmailBased ? 'email address' : 'phone number'} already exists. Please sign in instead.`,
+          userExists: true,
+        },
+        { status: 409 }
+      );
+    }
 
-      // Send OTP via Resend email
-      const result = await sendOTPEmail(normalizedEmail, otp);
+    // Rate limit
+    if (isRateLimited(identifier)) {
+      return NextResponse.json(
+        { error: 'Too many OTP requests. Please try again later.' },
+        { status: 429 }
+      );
+    }
 
+    // Generate + store OTP
+    const otp = generateOTP(6);
+    storeOTP(identifier, otp, 10);
+    trackOTPRequest(identifier);
+
+    // Deliver OTP
+    if (isEmailBased) {
+      const result = await sendOTPEmail(identifier, otp);
       if (!result.success) {
         console.error('Failed to send OTP email:', result.error);
         return NextResponse.json(
@@ -56,48 +104,15 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
-
       return NextResponse.json({
         success: true,
         message: 'OTP sent to your email',
-        email: normalizedEmail,
+        email: identifier,
         method: 'email',
       });
     }
 
-    // --- PHONE-BASED OTP (existing flow) ---
-    // Normalize phone number
-    const normalizedPhone = normalizePhoneNumber(phone);
-
-    // Validate Kenyan phone number
-    const phoneRegex = /^\+254[17]\d{8}$/;
-    if (!phoneRegex.test(normalizedPhone)) {
-      return NextResponse.json(
-        { error: 'Please enter a valid Kenyan phone number' },
-        { status: 400 }
-      );
-    }
-
-    // Check rate limiting
-    if (isRateLimited(normalizedPhone)) {
-      return NextResponse.json(
-        { error: 'Too many OTP requests. Please try again later.' },
-        { status: 429 }
-      );
-    }
-
-    // Generate OTP
-    const otp = generateOTP(6);
-
-    // Store OTP
-    storeOTP(normalizedPhone, otp, 10);
-
-    // Track request for rate limiting
-    trackOTPRequest(normalizedPhone);
-
-    // Send OTP via Africa's Talking
-    const result = await sendOTP(normalizedPhone, otp);
-
+    const result = await sendOTP(identifier, otp);
     if (!result.success) {
       console.error('Failed to send OTP:', result.error);
       return NextResponse.json(
@@ -109,7 +124,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'OTP sent successfully',
-      phone: normalizedPhone,
+      phone: identifier,
       method: 'sms',
     });
   } catch (error) {

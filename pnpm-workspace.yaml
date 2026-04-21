@@ -1,3 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# pnpm settings (moved from .npmrc to avoid npm "Unknown project config" warnings)
+nodeLinker: hoisted
+shamefullyHoist: true

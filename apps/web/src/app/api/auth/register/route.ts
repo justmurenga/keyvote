@@ -137,31 +137,22 @@ export async function POST(request: NextRequest) {
       // Rollback auth user if profile creation fails
       await adminClient.auth.admin.deleteUser(authUser.user.id);
       return NextResponse.json(
-        { error: 'Failed to create user profile. Please try again.' },
+        {
+          error:
+            process.env.NODE_ENV === 'production'
+              ? 'Failed to create user profile. Please try again.'
+              : `Failed to create user profile: ${profileError.message}`,
+        },
         { status: 500 }
       );
     }
 
-    // Create user preferences
-    await (adminClient as any)
-      .from('user_preferences')
-      .insert({
-        user_id: authUser.user.id,
-        sms_notifications: true,
-        push_notifications: true,
-      });
+    // Note: user_preferences is auto-created by the tr_create_user_preferences
+    // trigger on the users table. Inserting again here would violate the UNIQUE
+    // constraint on user_preferences.user_id.
 
     // Clear OTP after successful registration
     clearOTP(verifiedIdentifier);
-
-    // Generate session for the new user
-    const { data: sessionData, error: sessionError } = await adminClient.auth.admin.generateLink({
-      type: 'magiclink',
-      email,
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`,
-      },
-    });
 
     return NextResponse.json({
       success: true,

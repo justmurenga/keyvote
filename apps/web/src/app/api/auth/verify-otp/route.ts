@@ -62,99 +62,50 @@ export async function POST(request: NextRequest) {
         existingUser = data as typeof existingUser;
       }
 
-      let user: { id: string; phone: any; full_name: string; role: string; email: any } | null = existingUser;
+      const user: { id: string; phone: any; full_name: string; role: string; email: any } | null = existingUser;
 
-      // If no user exists, auto-create one (seamless sign-up)
+      // No silent auto-create on login. If account doesn't exist, tell the
+      // client to send the user through registration.
       if (!user) {
-        console.log('[verify-otp] No user found, auto-creating account for:', identifier);
-
-        const userEmail = isEmailBased ? identifier : `${identifier.replace('+', '')}@myvote.ke`;
-        const userPhone = isEmailBased ? '' : identifier;
-
-        // Create auth user in Supabase
-        const { data: authUser, error: authError } = await adminClient.auth.admin.createUser({
-          email: userEmail,
-          email_confirm: true,
-          ...(userPhone ? { phone: userPhone, phone_confirm: true } : {}),
-          user_metadata: {
-            full_name: 'New User',
-            ...(userPhone ? { phone: userPhone } : {}),
-            email: userEmail,
+        console.log('[verify-otp] No user found for login:', identifier);
+        return NextResponse.json(
+          {
+            error: `No account found with this ${isEmailBased ? 'email address' : 'phone number'}. Please create an account first.`,
+            needsRegistration: true,
           },
-        });
-
-        if (authError) {
-          console.error('[verify-otp] Auth user creation error:', authError);
-          return NextResponse.json(
-            { error: 'Failed to create account. Please try again.' },
-            { status: 500 }
-          );
-        }
-
-        console.log('[verify-otp] Auth user created:', authUser.user.id);
-
-        // Create user profile in users table
-        const { error: profileError } = await (adminClient as any)
-          .from('users')
-          .insert({
-            id: authUser.user.id,
-            phone: userPhone || null,
-            email: userEmail,
-            full_name: 'New User',
-            is_verified: true,
-            role: 'voter',
-          });
-
-        if (profileError) {
-          console.error('[verify-otp] Profile creation error:', profileError);
-          // Rollback auth user if profile creation fails
-          await adminClient.auth.admin.deleteUser(authUser.user.id);
-          return NextResponse.json(
-            { error: 'Failed to create user profile. Please try again.' },
-            { status: 500 }
-          );
-        }
-
-        console.log('[verify-otp] User profile created for:', identifier);
-
-        user = {
-          id: authUser.user.id,
-          phone: userPhone,
-          full_name: 'New User',
-          role: 'voter',
-          email: userEmail,
-        };
+          { status: 404 }
+        );
       }
 
       // Update last login
+      const u = user as { id: string; phone: any; full_name: string; role: string; email: any };
       await (adminClient as any)
         .from('users')
         .update({ last_login: new Date().toISOString() })
-        .eq('id', user.id);
+        .eq('id', u.id);
 
       // Clear OTP after successful verification
       clearOTP(identifier);
 
       // Create session data
       const sessionData = {
-        userId: user.id,
-        phone: user.phone,
-        email: user.email,
-        fullName: user.full_name,
-        role: user.role,
+        userId: u.id,
+        phone: u.phone,
+        email: u.email,
+        fullName: u.full_name,
+        role: u.role,
         expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
       };
 
       // Create response with session cookie
-      const mobileAccessToken = createMobileAccessToken(user.id, user.role);
+      const mobileAccessToken = createMobileAccessToken(u.id, u.role);
 
       const response = NextResponse.json({
         success: true,
         message: 'Login successful',
-        user: user,
-        isNewUser: !existingUser,
+        user: u,
         mobileAccessToken,
-        redirectTo: !existingUser ? '/dashboard/settings' : '/dashboard',
+        redirectTo: '/dashboard',
       });
 
       // Set session cookie

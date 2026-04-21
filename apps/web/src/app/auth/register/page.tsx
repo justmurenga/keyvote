@@ -74,11 +74,11 @@ export default function RegisterPage() {
       if (authMethod === 'email') {
         const trimmedEmail = emailInput.trim().toLowerCase();
         setNormalizedEmail(trimmedEmail);
-        requestBody = { email: trimmedEmail };
+        requestBody = { email: trimmedEmail, action: 'register' };
       } else {
         const normalized = normalizePhone(phone);
         setNormalizedPhone(normalized);
-        requestBody = { phone: normalized };
+        requestBody = { phone: normalized, action: 'register' };
       }
 
       const response = await fetch('/api/auth/send-otp', {
@@ -90,6 +90,15 @@ export default function RegisterPage() {
       const data = await response.json();
 
       if (!response.ok) {
+        if (data.userExists) {
+          toast({
+            variant: 'destructive',
+            title: 'Account already exists',
+            description: 'Please sign in instead. Redirecting…',
+          });
+          setTimeout(() => router.push('/auth/login'), 1200);
+          return;
+        }
         throw new Error(data.error || 'Failed to send OTP');
       }
 
@@ -205,8 +214,8 @@ export default function RegisterPage() {
     setIsLoading(true);
     try {
       const resendBody: Record<string, string> = authMethod === 'email'
-        ? { email: normalizedEmail }
-        : { phone: normalizedPhone };
+        ? { email: normalizedEmail, action: 'register' }
+        : { phone: normalizedPhone, action: 'register' };
 
       const response = await fetch('/api/auth/send-otp', {
         method: 'POST',
@@ -295,7 +304,7 @@ export default function RegisterPage() {
         payload.phone = normalizedPhone;
       }
 
-      if (pollingStationId) {
+      if (pollingStationId && !skipPollingStation) {
         payload.pollingStationId = pollingStationId;
       }
 

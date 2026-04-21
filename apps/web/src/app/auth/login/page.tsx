@@ -63,11 +63,11 @@ function LoginPageContent() {
       if (authMethod === 'email') {
         const trimmedEmail = email.trim().toLowerCase();
         setNormalizedEmail(trimmedEmail);
-        requestBody = { email: trimmedEmail };
+        requestBody = { email: trimmedEmail, action: 'login' };
       } else {
         const normalized = normalizePhone(phone);
         setNormalizedPhone(normalized);
-        requestBody = { phone: normalized };
+        requestBody = { phone: normalized, action: 'login' };
       }
 
       const response = await fetch('/api/auth/send-otp', {
@@ -79,6 +79,15 @@ function LoginPageContent() {
       const data = await response.json();
 
       if (!response.ok) {
+        if (data.needsRegistration) {
+          toast({
+            variant: 'destructive',
+            title: 'Account not found',
+            description: 'You need to create an account first. Redirecting to sign up…',
+          });
+          setTimeout(() => router.push('/auth/register'), 1200);
+          return;
+        }
         throw new Error(data.error || 'Failed to send OTP');
       }
 
@@ -213,8 +222,8 @@ function LoginPageContent() {
     setIsLoading(true);
     try {
       const resendBody: Record<string, string> = authMethod === 'email'
-        ? { email: normalizedEmail }
-        : { phone: normalizedPhone };
+        ? { email: normalizedEmail, action: 'login' }
+        : { phone: normalizedPhone, action: 'login' };
 
       const response = await fetch('/api/auth/send-otp', {
         method: 'POST',
