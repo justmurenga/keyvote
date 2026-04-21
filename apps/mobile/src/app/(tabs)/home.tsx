@@ -12,6 +12,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/stores/auth-store';
+import { useNotifications } from '@/hooks/useNotifications';
+import { acceptAgentInvitation, markNotificationRead } from '@/services/notifications';
 import { Card, Avatar, Badge } from '@/components/ui';
 import { FontSize, Spacing, BorderRadius } from '@/constants/theme';
 import { APP_NAME } from '@/constants';
@@ -20,13 +22,30 @@ export default function HomeScreen() {
   const router = useRouter();
   const colors = useTheme();
   const { profile } = useAuthStore();
+  const { unreadCount, latestBanner, dismissBanner, refresh: refreshNotifications, setUnreadCount, setNotifications } = useNotifications();
   const [refreshing, setRefreshing] = React.useState(false);
+  const [acceptingInvite, setAcceptingInvite] = React.useState(false);
   const isFieldRole = ['candidate', 'agent', 'admin', 'super_admin'].includes(profile?.role || 'voter');
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // Refresh data
+    await refreshNotifications();
     setRefreshing(false);
+  };
+
+  const handleAcceptInviteBanner = async () => {
+    if (!latestBanner) return;
+    const token = latestBanner.metadata?.invitation_token;
+    if (!token) return;
+    setAcceptingInvite(true);
+    const res = await acceptAgentInvitation(token);
+    setAcceptingInvite(false);
+    if (res.success) {
+      await markNotificationRead(latestBanner.id);
+      setNotifications((prev) => prev.map((x) => (x.id === latestBanner.id ? { ...x, is_read: true } : x)));
+      setUnreadCount((c) => Math.max(0, c - 1));
+      dismissBanner();
+    }
   };
 
   const greeting = () => {
@@ -102,16 +121,64 @@ export default function HomeScreen() {
               {profile?.full_name || 'Mwananchi'}
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={() => router.push('/(tabs)/profile')}
-          >
-            <Avatar
-              uri={profile?.profile_photo_url}
-              name={profile?.full_name || 'User'}
-              size={44}
-            />
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              onPress={() => router.push('/notifications')}
+              style={styles.bellWrap}
+              accessibilityLabel="Notifications"
+            >
+              <Ionicons name="notifications-outline" size={24} color={colors.text} />
+              {unreadCount > 0 && (
+                <View style={[styles.bellBadge, { backgroundColor: colors.error || '#ef4444' }]}>
+                  <Text style={styles.bellBadgeText}>
+                    {unreadCount > 9 ? '9+' : String(unreadCount)}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
+              <Avatar
+                uri={profile?.profile_photo_url}
+                name={profile?.full_name || 'User'}
+                size={44}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* In-app realtime banner: agent invitation */}
+        {latestBanner && latestBanner.type === 'agent_invitation' && (
+          <View style={[styles.inviteBanner, { backgroundColor: colors.primaryFaded, borderColor: colors.primary }]}>
+            <View style={[styles.inviteIcon, { backgroundColor: colors.primary }]}>
+              <Ionicons name="shield-checkmark" size={20} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.inviteTitle, { color: colors.text }]} numberOfLines={1}>
+                {latestBanner.title}
+              </Text>
+              <Text style={[styles.inviteBody, { color: colors.textSecondary }]} numberOfLines={2}>
+                {latestBanner.body}
+              </Text>
+              <View style={styles.inviteActions}>
+                <TouchableOpacity
+                  onPress={handleAcceptInviteBanner}
+                  disabled={acceptingInvite}
+                  style={[styles.inviteAccept, { backgroundColor: colors.primary }]}
+                >
+                  <Text style={styles.inviteAcceptText}>
+                    {acceptingInvite ? 'Accepting…' : 'Accept'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={dismissBanner} style={styles.inviteDismiss}>
+                  <Text style={[styles.inviteDismissText, { color: colors.textSecondary }]}>Later</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <TouchableOpacity onPress={dismissBanner} style={styles.inviteClose}>
+              <Ionicons name="close" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Profile Completion Banner */}
         {(!profile?.polling_station_id) && (
@@ -306,4 +373,49 @@ const styles = StyleSheet.create({
   posInfo: { flex: 1 },
   posTitle: { fontSize: FontSize.base, fontWeight: '600' },
   posScope: { fontSize: FontSize.xs, marginTop: 1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  bellWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bellBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  inviteBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    marginBottom: Spacing.lg,
+  },
+  inviteIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inviteTitle: { fontSize: FontSize.base, fontWeight: '700' },
+  inviteBody: { fontSize: FontSize.sm, marginTop: 2 },
+  inviteActions: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  inviteAccept: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: BorderRadius.md },
+  inviteAcceptText: { color: '#fff', fontWeight: '700', fontSize: FontSize.sm },
+  inviteDismiss: { paddingVertical: 6, paddingHorizontal: 10 },
+  inviteDismissText: { fontWeight: '600', fontSize: FontSize.sm },
+  inviteClose: { padding: 4 },
 });

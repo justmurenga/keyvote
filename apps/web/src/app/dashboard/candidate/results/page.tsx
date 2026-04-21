@@ -16,12 +16,15 @@ import {
   Clock,
   CheckCircle2,
   Users,
+  MapPin,
 } from 'lucide-react';
 
 interface PollResult {
   id: string;
   title: string;
+  description?: string;
   position: string;
+  positionLabel?: string;
   status: string;
   start_time: string;
   end_time: string;
@@ -29,6 +32,10 @@ interface PollResult {
   my_votes: number;
   my_rank: number;
   total_candidates: number;
+  leader?: { name: string; party: string; votes: number } | null;
+  hasVoted?: boolean;
+  region?: string;
+  region_level?: string;
 }
 
 interface ElectionResult {
@@ -96,57 +103,73 @@ export default function CandidateResultsPage() {
         const pollsData = await pollsRes.json();
         const polls = pollsData.polls || [];
 
-        // Get vote counts for each poll
-        const resultsWithVotes = await Promise.all(
-          polls.slice(0, 20).map(async (poll: any) => {
-            try {
-              const voteRes = await fetch(`/api/polls/${poll.id}/results`);
-              if (voteRes.ok) {
-                const voteData = await voteRes.json();
-                const results = voteData.results || [];
-                const totalVotes = results.reduce((sum: number, r: any) => sum + (r.vote_count || 0), 0);
-                const myResult = results.find((r: any) => r.candidate_id === candidate.id);
-                const myRank = results.findIndex((r: any) => r.candidate_id === candidate.id) + 1;
+        // The /api/polls endpoint already returns aggregated `options[]` with
+        // per-candidate votes and a `totalVotes` count, so no secondary fetch
+        // is needed. Each option's `id` is the candidate id.
+        const resultsWithVotes: PollResult[] = polls.map((poll: any) => {
+          const options: any[] = poll.options || [];
+          const sorted = [...options].sort(
+            (a, b) => (b.votes || 0) - (a.votes || 0)
+          );
+          const myIndex = sorted.findIndex((o) => o.id === candidate.id);
+          const myOption = myIndex >= 0 ? sorted[myIndex] : null;
+          const top = sorted[0] || null;
 
-                return {
-                  id: poll.id,
-                  title: poll.title,
-                  position: poll.position,
-                  status: poll.status,
-                  start_time: poll.start_time,
-                  end_time: poll.end_time,
-                  total_votes: totalVotes,
-                  my_votes: myResult?.vote_count || 0,
-                  my_rank: myRank || 0,
-                  total_candidates: results.length,
-                };
-              }
-            } catch (e) {
-              // Skip this poll
-            }
-            return {
-              id: poll.id,
-              title: poll.title,
-              position: poll.position,
-              status: poll.status,
-              start_time: poll.start_time,
-              end_time: poll.end_time,
-              total_votes: 0,
-              my_votes: 0,
-              my_rank: 0,
-              total_candidates: 0,
-            };
-          })
-        );
+          return {
+            id: poll.id,
+            title: poll.question || poll.title || 'Untitled Poll',
+            description: poll.description,
+            position: poll.position,
+            positionLabel: poll.positionLabel,
+            status: poll.status,
+            start_time: poll.startsAt || poll.start_time,
+            end_time: poll.endsAt || poll.end_time,
+            total_votes: Number(poll.totalVotes ?? 0),
+            my_votes: Number(myOption?.votes ?? 0),
+            my_rank: myIndex >= 0 ? myIndex + 1 : 0,
+            total_candidates: options.length,
+            leader: top
+              ? {
+                  name: top.candidateName || top.text || 'Unknown',
+                  party: top.party || 'IND',
+                  votes: Number(top.votes ?? 0),
+                }
+              : null,
+            hasVoted: !!poll.hasVoted,
+            region: poll.region,
+            region_level: poll.regionLevel,
+          };
+        });
 
         setPollResults(resultsWithVotes);
       }
 
       // Fetch election results
-      const electionRes = await fetch(`/api/results?candidate_id=${candidate.id}`);
+      const electionRes = await fetch(`/api/results?position=${candidate.position}`);
       if (electionRes.ok) {
         const electionData = await electionRes.json();
-        setElectionResults(electionData.results || []);
+        // The /api/results endpoint returns aggregated results per position:
+        //   { results: [{ id, region, candidates: [{ id, name, votes, ... }], totalVotes, ... }] }
+        // Transform into the per-region rows this page renders, filtered to this candidate.
+        const rows: ElectionResult[] = [];
+        for (const r of electionData.results || []) {
+          const mine = (r.candidates || []).find((c: any) => c.id === candidate.id);
+          if (!mine) continue;
+          rows.push({
+            id: r.id,
+            position: r.position,
+            polling_station: null,
+            ward: null,
+            constituency: null,
+            county: null,
+            // Synthesize a region label from the API's region string
+            // by stuffing it into county.name so the existing renderer picks it up.
+            ...({ county: { name: r.region || 'National' } } as any),
+            votes: Number(mine.votes ?? 0),
+            total_votes_in_region: Number(r.totalVotes ?? 0),
+          });
+        }
+        setElectionResults(rows);
       }
     } catch (e) {
       setError('Failed to load results');
@@ -213,12 +236,20 @@ export default function CandidateResultsPage() {
                   ? ((poll.my_votes / poll.total_votes) * 100).toFixed(1)
                   : '0';
 
+              const fmtDate = (d?: string) => {
+                if (!d) return 'TBD';
+                const dt = new Date(d);
+                return isNaN(dt.getTime()) ? 'TBD' : dt.toLocaleDateString();
+              };
+              const startLabel = fmtDate(poll.start_time);
+              const endLabel = fmtDate(poll.end_time);
+
               return (
                 <Card key={poll.id} className="hover:shadow-md transition-shadow">
                   <CardContent className="p-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                      <div className="space-y-2 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="font-semibold">{poll.title}</h3>
                           <Badge
                             className={`text-xs ${
@@ -227,17 +258,54 @@ export default function CandidateResultsPage() {
                           >
                             {poll.status}
                           </Badge>
+                          {poll.positionLabel && (
+                            <Badge variant="outline" className="text-xs">
+                              {poll.positionLabel}
+                            </Badge>
+                          )}
+                          {poll.hasVoted && (
+                            <Badge variant="outline" className="text-xs text-green-700 border-green-300">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Voted
+                            </Badge>
+                          )}
                         </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        {poll.description && (
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {poll.description}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {new Date(poll.start_time).toLocaleDateString()} —{' '}
-                            {new Date(poll.end_time).toLocaleDateString()}
+                            {startLabel} — {endLabel}
                           </span>
+                          {poll.region && (
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              {poll.region}
+                              {poll.region_level && poll.region_level !== 'national'
+                                ? ` (${poll.region_level})`
+                                : ''}
+                            </span>
+                          )}
                           <span className="flex items-center gap-1">
                             <Users className="h-3 w-3" />
-                            {poll.total_candidates} candidates
+                            {poll.total_candidates} candidate
+                            {poll.total_candidates === 1 ? '' : 's'}
                           </span>
+                          <span className="flex items-center gap-1">
+                            <BarChart3 className="h-3 w-3" />
+                            {poll.total_votes.toLocaleString()} total vote
+                            {poll.total_votes === 1 ? '' : 's'}
+                          </span>
+                          {poll.leader && poll.my_rank !== 1 && poll.total_votes > 0 && (
+                            <span className="flex items-center gap-1">
+                              <Trophy className="h-3 w-3 text-yellow-500" />
+                              Leader: {poll.leader.name} ({poll.leader.party}) ·{' '}
+                              {poll.leader.votes.toLocaleString()}
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -256,7 +324,9 @@ export default function CandidateResultsPage() {
                               {poll.my_rank === 1 && <Trophy className="h-4 w-4 text-yellow-500" />}
                               <p className="text-2xl font-bold">#{poll.my_rank}</p>
                             </div>
-                            <p className="text-xs text-muted-foreground">Rank</p>
+                            <p className="text-xs text-muted-foreground">
+                              Rank{poll.total_candidates > 0 ? ` of ${poll.total_candidates}` : ''}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -318,17 +388,19 @@ export default function CandidateResultsPage() {
                           result.constituency?.name ||
                           result.county?.name ||
                           'Unknown';
+                        const votes = Number(result.votes ?? 0);
+                        const totalInRegion = Number(result.total_votes_in_region ?? 0);
                         const pct =
-                          result.total_votes_in_region > 0
-                            ? ((result.votes / result.total_votes_in_region) * 100).toFixed(1)
+                          totalInRegion > 0
+                            ? ((votes / totalInRegion) * 100).toFixed(1)
                             : '0';
 
                         return (
                           <tr key={result.id} className="border-b hover:bg-muted/30">
                             <td className="p-4 font-medium">{region}</td>
-                            <td className="p-4">{result.votes.toLocaleString()}</td>
+                            <td className="p-4">{votes.toLocaleString()}</td>
                             <td className="p-4 text-muted-foreground">
-                              {result.total_votes_in_region.toLocaleString()}
+                              {totalInRegion.toLocaleString()}
                             </td>
                             <td className="p-4">
                               <div className="flex items-center gap-2">

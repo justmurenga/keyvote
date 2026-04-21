@@ -7,7 +7,6 @@ import { Search, ChevronLeft, ChevronRight, Loader2, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CandidateCard, CandidateCardProps } from '@/components/candidates';
-import { SiteHeader, SiteFooter } from '@/components/layout';
 
 const POSITIONS = [
   { value: 'all', label: 'All Positions' },
@@ -53,6 +52,14 @@ function CandidatesPageContent() {
       params.set('limit', '12');
 
       const response = await fetch(`/api/candidates?${params.toString()}`);
+
+      // If not authenticated, send the visitor to login and come back to this page.
+      if (response.status === 401) {
+        const redirect = encodeURIComponent('/candidates');
+        window.location.href = `/auth/login?redirect=${redirect}`;
+        return;
+      }
+
       const data: CandidatesResponse = await response.json();
 
       if (response.ok) {
@@ -80,22 +87,13 @@ function CandidatesPageContent() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <SiteHeader />
-
       <main className="flex-1">
-        {/* Page Header */}
-        <section className="border-b bg-muted/30 py-12">
-          <div className="container">
-            <h1 className="text-3xl font-bold mb-2">Candidates</h1>
-            <p className="text-muted-foreground">
-              Browse and follow candidates running for various positions across Kenya
-            </p>
-          </div>
-        </section>
-
         {/* Filters */}
         <section className="border-b py-6">
           <div className="container">
+            <div className="mb-4">
+              <h1 className="text-2xl font-bold">Candidates</h1>
+            </div>
             <div className="flex flex-col md:flex-row gap-4">
               {/* Search */}
               <form onSubmit={handleSearch} className="flex-1 flex gap-2">
@@ -192,8 +190,6 @@ function CandidatesPageContent() {
           </div>
         </section>
       </main>
-
-      <SiteFooter />
     </div>
   );
 }

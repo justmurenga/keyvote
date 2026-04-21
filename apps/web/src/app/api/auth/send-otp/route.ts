@@ -98,9 +98,18 @@ export async function POST(request: NextRequest) {
     if (isEmailBased) {
       const result = await sendOTPEmail(identifier, otp);
       if (!result.success) {
-        console.error('Failed to send OTP email:', result.error);
+        console.error('[send-otp] Failed to send OTP email:', {
+          to: identifier,
+          error: result.error,
+        });
+        const isDev = process.env.NODE_ENV !== 'production';
         return NextResponse.json(
-          { error: 'Failed to send OTP email. Please try again.' },
+          {
+            error: isDev
+              ? `Failed to send OTP email: ${result.error || 'Unknown error'}`
+              : 'Failed to send OTP email. Please try again.',
+            ...(isDev ? { detail: result.error, devOtp: otp } : {}),
+          },
           { status: 500 }
         );
       }

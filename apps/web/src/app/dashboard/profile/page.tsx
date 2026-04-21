@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   User,
@@ -17,6 +17,11 @@ import {
   ChevronLeft,
   Pencil,
   Shield,
+  Camera,
+  Trash2,
+  Megaphone,
+  ScrollText,
+  Flag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,6 +50,19 @@ const AGE_BRACKET_OPTIONS = [
   { value: '65+', label: '65+ years' },
 ] as const;
 
+interface CandidateFields {
+  id: string;
+  position: string;
+  party_id: string | null;
+  is_independent: boolean;
+  campaign_slogan: string | null;
+  manifesto_text: string | null;
+  manifesto_pdf_url: string | null;
+  campaign_video_url: string | null;
+  is_verified: boolean;
+  verification_status: string | null;
+}
+
 interface ProfileData {
   id: string;
   phone: string | null;
@@ -67,6 +85,7 @@ interface ProfileData {
   county_name: string | null;
   created_at: string;
   updated_at: string;
+  candidate?: CandidateFields | null;
 }
 
 interface ProfileCompletion {
@@ -75,6 +94,8 @@ interface ProfileCompletion {
   totalFields: number;
   missingFields: string[];
   isComplete: boolean;
+  requiredFields?: string[];
+  optionalFields?: string[];
 }
 
 const FIELD_LABELS: Record<string, string> = {
@@ -85,6 +106,12 @@ const FIELD_LABELS: Record<string, string> = {
   polling_station_id: 'Polling Station',
   email: 'Email Address',
   bio: 'Bio',
+  profile_photo_url: 'Profile Photo',
+  campaign_slogan: 'Campaign Slogan',
+  manifesto_text: 'Manifesto',
+  manifesto_pdf_url: 'Manifesto PDF',
+  campaign_video_url: 'Campaign Video',
+  party_or_independent: 'Party / Independent',
 };
 
 export default function ProfilePage() {
@@ -108,6 +135,19 @@ export default function ProfilePage() {
     polling_station_id: '',
   });
   const [pollingStationName, setPollingStationName] = useState('');
+
+  // Candidate-specific form state (only used when role === 'candidate')
+  const [candidateForm, setCandidateForm] = useState({
+    campaign_slogan: '',
+    manifesto_text: '',
+    manifesto_pdf_url: '',
+    campaign_video_url: '',
+  });
+
+  // Profile photo upload state
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isRemovingPhoto, setIsRemovingPhoto] = useState(false);
 
   // Phone verification flow state (used when the user signed up with email
   // and needs to add + verify a phone number to complete their profile).
@@ -159,6 +199,16 @@ export default function ProfilePage() {
       });
       setPollingStationName(data.profile.polling_station_name || '');
 
+      // Pre-fill candidate-specific form when applicable
+      if (data.profile.candidate) {
+        setCandidateForm({
+          campaign_slogan: data.profile.candidate.campaign_slogan || '',
+          manifesto_text: data.profile.candidate.manifesto_text || '',
+          manifesto_pdf_url: data.profile.candidate.manifesto_pdf_url || '',
+          campaign_video_url: data.profile.candidate.campaign_video_url || '',
+        });
+      }
+
       // Auto-open edit mode if profile is incomplete
       if (!data.completion.isComplete) {
         setIsEditing(true);
@@ -200,7 +250,29 @@ export default function ProfilePage() {
         payload.polling_station_id = formData.polling_station_id;
       }
 
-      if (Object.keys(payload).length === 0) {
+      // Candidate-specific changes (saved through the candidate API)
+      const isCandidate = profile?.role === 'candidate' && profile.candidate;
+      const candidatePayload: Record<string, unknown> = {};
+      if (isCandidate && profile?.candidate) {
+        const c = profile.candidate;
+        if (candidateForm.campaign_slogan !== (c.campaign_slogan || '')) {
+          candidatePayload.campaign_slogan = candidateForm.campaign_slogan || null;
+        }
+        if (candidateForm.manifesto_text !== (c.manifesto_text || '')) {
+          candidatePayload.manifesto_text = candidateForm.manifesto_text || null;
+        }
+        if (candidateForm.manifesto_pdf_url !== (c.manifesto_pdf_url || '')) {
+          candidatePayload.manifesto_pdf_url = candidateForm.manifesto_pdf_url || null;
+        }
+        if (candidateForm.campaign_video_url !== (c.campaign_video_url || '')) {
+          candidatePayload.campaign_video_url = candidateForm.campaign_video_url || null;
+        }
+      }
+
+      if (
+        Object.keys(payload).length === 0 &&
+        Object.keys(candidatePayload).length === 0
+      ) {
         toast({
           title: 'No changes',
           description: 'No changes were made to your profile.',
@@ -209,17 +281,31 @@ export default function ProfilePage() {
         return;
       }
 
-      const res = await fetch('/api/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify(payload),
-      });
+      if (Object.keys(payload).length > 0) {
+        const res = await fetch('/api/profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload),
+        });
 
-      const data = await res.json();
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to update profile');
+        }
+      }
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to update profile');
+      if (Object.keys(candidatePayload).length > 0) {
+        const res = await fetch('/api/candidates/me', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(candidatePayload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to update candidate profile');
+        }
       }
 
       toast({
@@ -415,6 +501,89 @@ export default function ProfilePage() {
     }
   };
 
+  const handleAvatarSelect = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // Reset input so the same file can be re-selected later
+    event.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Unsupported file',
+        description: 'Please choose a JPEG, PNG, WEBP or GIF image.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'Image too large',
+        description: 'Choose an image that is 5 MB or smaller.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsUploadingPhoto(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/profile/photo', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to upload photo');
+      }
+      toast({
+        title: 'Photo updated',
+        description: 'Your profile photo has been updated.',
+      });
+      await fetchProfile();
+      router.refresh();
+    } catch (err: any) {
+      toast({
+        title: 'Upload failed',
+        description: err.message || 'Could not upload photo. Try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!profile?.profile_photo_url) return;
+    setIsRemovingPhoto(true);
+    try {
+      const res = await fetch('/api/profile/photo', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to remove photo');
+      }
+      toast({ title: 'Photo removed' });
+      await fetchProfile();
+      router.refresh();
+    } catch (err: any) {
+      toast({
+        title: 'Could not remove photo',
+        description: err.message || 'Try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRemovingPhoto(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -549,11 +718,42 @@ export default function ProfilePage() {
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Avatar + Name Section */}
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-bold">
-                  {initials}
+              <div className="flex items-start gap-4">
+                <div className="relative">
+                  {profile.profile_photo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={profile.profile_photo_url}
+                      alt={profile.full_name}
+                      className="h-20 w-20 rounded-full object-cover border"
+                    />
+                  ) : (
+                    <div className="h-20 w-20 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-bold">
+                      {initials}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleAvatarSelect}
+                    disabled={isUploadingPhoto || isRemovingPhoto}
+                    title="Change profile photo"
+                    className="absolute -bottom-1 -right-1 h-7 w-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow ring-2 ring-background hover:opacity-90 disabled:opacity-60"
+                  >
+                    {isUploadingPhoto ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Camera className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    onChange={handleAvatarChange}
+                  />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 space-y-2">
                   {isEditing ? (
                     <div>
                       <Label htmlFor="full_name">Full Name</Label>
@@ -582,6 +782,36 @@ export default function ProfilePage() {
                       </p>
                     </div>
                   )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAvatarSelect}
+                      disabled={isUploadingPhoto || isRemovingPhoto}
+                    >
+                      <Camera className="h-3.5 w-3.5 mr-1.5" />
+                      {profile.profile_photo_url ? 'Change photo' : 'Upload photo'}
+                    </Button>
+                    {profile.profile_photo_url && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemoveAvatar}
+                        disabled={isUploadingPhoto || isRemovingPhoto}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        {isRemovingPhoto ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                        )}
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    JPEG, PNG, WEBP or GIF • up to 5 MB
+                  </p>
                 </div>
               </div>
 
@@ -827,9 +1057,171 @@ export default function ProfilePage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        {/* Location Tab */}
+          {/* Candidate-specific fields */}
+          {profile.role === 'candidate' && profile.candidate && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Megaphone className="h-5 w-5" />
+                  Candidate Profile
+                </CardTitle>
+                <CardDescription>
+                  These fields are required for a complete candidate profile
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Party / Independent (read-only here, set during application) */}
+                <div>
+                  <Label className="flex items-center gap-2 mb-2">
+                    <Flag className="h-4 w-4 text-muted-foreground" />
+                    Party Affiliation
+                    {!(profile.candidate.party_id || profile.candidate.is_independent) && (
+                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                        Missing
+                      </Badge>
+                    )}
+                  </Label>
+                  <p className="text-sm">
+                    {profile.candidate.is_independent
+                      ? 'Independent candidate'
+                      : profile.candidate.party_id
+                        ? 'Party affiliated'
+                        : '—'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    To change your party affiliation, contact support.
+                  </p>
+                </div>
+
+                {/* Campaign slogan */}
+                <div>
+                  <Label htmlFor="campaign_slogan" className="flex items-center gap-2 mb-2">
+                    <Megaphone className="h-4 w-4 text-muted-foreground" />
+                    Campaign Slogan
+                    <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                      Required
+                    </Badge>
+                  </Label>
+                  {isEditing ? (
+                    <Input
+                      id="campaign_slogan"
+                      value={candidateForm.campaign_slogan}
+                      onChange={(e) =>
+                        setCandidateForm((prev) => ({
+                          ...prev,
+                          campaign_slogan: e.target.value,
+                        }))
+                      }
+                      maxLength={500}
+                      placeholder="e.g. Building a better tomorrow, together"
+                    />
+                  ) : (
+                    <p className="text-sm">
+                      {profile.candidate.campaign_slogan || (
+                        <span className="text-muted-foreground italic">No slogan set</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+
+                {/* Manifesto text */}
+                <div>
+                  <Label htmlFor="manifesto_text" className="flex items-center gap-2 mb-2">
+                    <ScrollText className="h-4 w-4 text-muted-foreground" />
+                    Manifesto
+                    <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                      Required
+                    </Badge>
+                  </Label>
+                  {isEditing ? (
+                    <textarea
+                      id="manifesto_text"
+                      value={candidateForm.manifesto_text}
+                      onChange={(e) =>
+                        setCandidateForm((prev) => ({
+                          ...prev,
+                          manifesto_text: e.target.value,
+                        }))
+                      }
+                      rows={6}
+                      placeholder="Outline your vision, key policies and pledges to voters..."
+                      className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y"
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">
+                      {profile.candidate.manifesto_text || (
+                        <span className="text-muted-foreground italic">No manifesto added</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+
+                {/* Manifesto PDF (optional) */}
+                <div>
+                  <Label htmlFor="manifesto_pdf_url" className="flex items-center gap-2 mb-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    Manifesto PDF URL
+                    <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">
+                      Optional
+                    </Badge>
+                  </Label>
+                  {isEditing ? (
+                    <Input
+                      id="manifesto_pdf_url"
+                      type="url"
+                      value={candidateForm.manifesto_pdf_url}
+                      onChange={(e) =>
+                        setCandidateForm((prev) => ({
+                          ...prev,
+                          manifesto_pdf_url: e.target.value,
+                        }))
+                      }
+                      placeholder="https://..."
+                    />
+                  ) : (
+                    <p className="text-sm break-all">
+                      {profile.candidate.manifesto_pdf_url || (
+                        <span className="text-muted-foreground italic">Not provided</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+
+                {/* Campaign video (optional) */}
+                <div>
+                  <Label htmlFor="campaign_video_url" className="flex items-center gap-2 mb-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    Campaign Video URL
+                    <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">
+                      Optional
+                    </Badge>
+                  </Label>
+                  {isEditing ? (
+                    <Input
+                      id="campaign_video_url"
+                      type="url"
+                      value={candidateForm.campaign_video_url}
+                      onChange={(e) =>
+                        setCandidateForm((prev) => ({
+                          ...prev,
+                          campaign_video_url: e.target.value,
+                        }))
+                      }
+                      placeholder="https://youtube.com/..."
+                    />
+                  ) : (
+                    <p className="text-sm break-all">
+                      {profile.candidate.campaign_video_url || (
+                        <span className="text-muted-foreground italic">Not provided</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
         <TabsContent value="location" className="space-y-6">
           <Card>
             <CardHeader>
@@ -1160,6 +1552,14 @@ export default function ProfilePage() {
                   polling_station_id: profile.polling_station_id || '',
                 });
                 setPollingStationName(profile.polling_station_name || '');
+                if (profile.candidate) {
+                  setCandidateForm({
+                    campaign_slogan: profile.candidate.campaign_slogan || '',
+                    manifesto_text: profile.candidate.manifesto_text || '',
+                    manifesto_pdf_url: profile.candidate.manifesto_pdf_url || '',
+                    campaign_video_url: profile.candidate.campaign_video_url || '',
+                  });
+                }
               }
             }}
             disabled={isSaving}

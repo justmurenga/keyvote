@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Heart, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
@@ -15,6 +16,11 @@ interface FollowButtonProps {
   showCount?: boolean;
   className?: string;
   onFollowChange?: (isFollowing: boolean) => void;
+  /**
+   * If set, navigate to this URL after a successful FOLLOW (not unfollow).
+   * Used by the candidates listing page to take voters to their following list.
+   */
+  redirectAfterFollow?: string;
 }
 
 export function FollowButton({
@@ -26,7 +32,9 @@ export function FollowButton({
   showCount = false,
   className,
   onFollowChange,
+  redirectAfterFollow,
 }: FollowButtonProps) {
+  const router = useRouter();
   const [isFollowing, setIsFollowing] = useState(initialIsFollowing);
   const [isLoading, setIsLoading] = useState(false);
   const [count, setCount] = useState(followerCount);
@@ -71,6 +79,14 @@ export function FollowButton({
       });
 
       onFollowChange?.(newIsFollowing);
+
+      // After a successful FOLLOW (not unfollow), optionally navigate the
+      // voter to their following list so they can see the candidate they
+      // just followed (and the action feels persistent).
+      if (newIsFollowing && redirectAfterFollow) {
+        router.push(redirectAfterFollow);
+        router.refresh();
+      }
     } catch (error) {
       console.error('Follow error:', error);
       toast({

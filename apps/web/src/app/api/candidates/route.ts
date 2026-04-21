@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { resolveUserId } from '@/lib/auth/get-user';
 import type { ElectoralPosition } from '@myvote/database';
 
 const POSITION_LABELS: Record<string, string> = {
@@ -14,6 +16,17 @@ const POSITION_LABELS: Record<string, string> = {
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
+
+    // Require an authenticated user (Supabase auth or OTP session) to browse
+    // the candidates directory. We don't expose this list publicly.
+    const currentUserId = await resolveUserId(supabase);
+    if (!currentUserId) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
 
     const position = searchParams.get('position');
@@ -101,15 +114,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get current user's follows
-    const { data: { user } } = await supabase.auth.getUser();
+    // Get current user's follows.
+    // Use admin client to bypass RLS — followers RLS requires
+    // voter_id = auth.uid() which is null for OTP-session users.
     let followedIds: string[] = [];
-
-    if (user) {
-      const { data: follows } = await supabase
+    {
+      const admin = createAdminClient();
+      const { data: follows } = await admin
         .from('followers')
         .select('candidate_id')
-        .eq('voter_id', user.id)
+        .eq('voter_id', currentUserId)
         .eq('is_following', true) as { data: Array<{ candidate_id: string }> | null; error: any };
 
       followedIds = follows?.map(f => f.candidate_id) || [];

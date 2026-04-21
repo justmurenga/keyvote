@@ -14,7 +14,6 @@ const publicRoutes = [
   '/api/auth/login',
   '/api/auth/logout',
   '/api/health',
-  '/api/candidates',
   '/api/polls',
   '/api/results',
   '/api/regions',        // Public region data for registration

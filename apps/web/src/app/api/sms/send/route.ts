@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getUser } from '@/lib/auth/get-user';
-import { sendSMS, normalizePhoneNumber, calculateSMSCost } from '@/lib/sms/airtouch';
+import { sendSMS, calculateSMSCost, getSMSSegments } from '@/lib/sms/airtouch';
+import {
+  fetchRecipients,
+  applyMergeFields,
+  hasMergeFields,
+  type AudienceType,
+  type CandidateScope,
+  type RecipientRow,
+} from '@/lib/sms/targeting';
 
 // POST /api/sms/send — Send a bulk SMS campaign
 export async function POST(request: NextRequest) {
@@ -10,7 +18,18 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
-    const { message, targetType, targetCountyId, targetConstituencyId, targetWardId, targetGender, targetAgeBracket, scheduledAt } = body;
+    const {
+      message,
+      audienceType = 'followers',
+      targetType,
+      targetCountyId,
+      targetConstituencyId,
+      targetWardId,
+      targetPollingStationId,
+      targetGender,
+      targetAgeBracket,
+      scheduledAt,
+    } = body;
 
     if (!message?.trim()) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
@@ -18,75 +37,68 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Get candidate info + sender ID
-    const { data: candidate } = await supabase
-      .from('candidates')
-      .select('id, user_id')
+    const { data: candidate } = await (supabase
+      .from('candidates') as any)
+      .select('id, user_id, position, county_id, constituency_id, ward_id')
       .eq('user_id', user.id)
       .single();
 
     if (!candidate) {
       return NextResponse.json({ error: 'You must be a candidate to send bulk SMS' }, { status: 403 });
     }
+    const candidateScope = candidate as CandidateScope;
 
-    // Get approved sender ID for this candidate
-    const { data: senderConfig } = await supabase
-      .from('sms_sender_ids')
+    const { data: senderConfig } = await (supabase
+      .from('sms_sender_ids') as any)
       .select('sender_id, cost_per_sms')
-      .eq('candidate_id', candidate.id)
+      .eq('candidate_id', candidateScope.id)
       .eq('is_active', true)
       .eq('is_approved', true)
       .single();
 
     if (!senderConfig) {
-      return NextResponse.json({ error: 'No approved sender ID found. Contact admin to set up your SMS sender ID.' }, { status: 403 });
+      return NextResponse.json(
+        { error: 'No approved sender ID found. Contact admin to set up your SMS sender ID.' },
+        { status: 403 },
+      );
     }
 
-    // Build recipient query based on targeting
-    let query = supabase
-      .from('followers')
-      .select('users!inner(id, phone)')
-      .eq('candidate_id', candidate.id);
+    const audience: AudienceType = (audienceType as AudienceType) || 'followers';
+    const recipients: RecipientRow[] = await fetchRecipients(supabase, candidateScope, {
+      audienceType: audience,
+      countyId: targetCountyId || null,
+      constituencyId: targetConstituencyId || null,
+      wardId: targetWardId || null,
+      pollingStationId: targetPollingStationId || null,
+      gender: targetGender || null,
+      ageBracket: targetAgeBracket || null,
+    });
 
-    // Apply targeting filters
-    if (targetType === 'region') {
-      if (targetWardId) {
-        query = query.eq('users.ward_id', targetWardId);
-      } else if (targetConstituencyId) {
-        query = query.eq('users.constituency_id', targetConstituencyId);
-      } else if (targetCountyId) {
-        query = query.eq('users.county_id', targetCountyId);
-      }
-    }
-    if (targetGender) {
-      query = query.eq('users.gender', targetGender);
-    }
-    if (targetAgeBracket) {
-      query = query.eq('users.age_bracket', targetAgeBracket);
-    }
-
-    // Check opt-outs
-    const { data: optouts } = await supabase.from('sms_optouts').select('phone');
+    const phones = recipients.map((r) => r.phone).filter(Boolean) as string[];
+    const { data: optouts } = await (supabase
+      .from('sms_optouts') as any)
+      .select('phone')
+      .in('phone', phones);
     const optoutSet = new Set((optouts || []).map((o: any) => o.phone));
+    const eligible = recipients.filter((r) => r.phone && !optoutSet.has(r.phone));
 
-    const { data: followers, error: followerErr } = await query;
-    if (followerErr) {
-      return NextResponse.json({ error: 'Failed to fetch recipients' }, { status: 500 });
-    }
-
-    const recipients = (followers || [])
-      .map((f: any) => f.users?.phone)
-      .filter((phone: string) => phone && !optoutSet.has(normalizePhoneNumber(phone)))
-      .map((phone: string) => normalizePhoneNumber(phone));
-
-    if (recipients.length === 0) {
+    if (eligible.length === 0) {
       return NextResponse.json({ error: 'No eligible recipients found' }, { status: 400 });
     }
 
     const costPerSMS = senderConfig.cost_per_sms || 1.0;
-    const totalCost = calculateSMSCost(recipients.length, costPerSMS);
+    const usesMergeFields = hasMergeFields(message);
 
-    // Check wallet balance
+    let totalSegments = 0;
+    if (usesMergeFields) {
+      for (const r of eligible) {
+        totalSegments += getSMSSegments(applyMergeFields(message, r)).segments;
+      }
+    } else {
+      totalSegments = eligible.length * getSMSSegments(message).segments;
+    }
+    const totalCost = calculateSMSCost(totalSegments, costPerSMS);
+
     const { data: wallet } = await supabase
       .from('wallets')
       .select('id, balance')
@@ -99,21 +111,20 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Create campaign record
-    const { data: campaign, error: campaignErr } = await supabase
-      .from('sms_campaigns')
+    const { data: campaign, error: campaignErr } = await (supabase
+      .from('sms_campaigns') as any)
       .insert({
         sender_id: user.id,
         sender_id_name: senderConfig.sender_id,
         message,
-        target_type: targetType || 'all_followers',
+        target_type: targetType || audience,
         target_county_id: targetCountyId || null,
         target_constituency_id: targetConstituencyId || null,
         target_ward_id: targetWardId || null,
         target_gender: targetGender || null,
         target_age_bracket: targetAgeBracket || null,
         scheduled_at: scheduledAt || null,
-        total_recipients: recipients.length,
+        total_recipients: eligible.length,
         cost_per_sms: costPerSMS,
         total_cost: totalCost,
         status: scheduledAt ? 'scheduled' : 'sending',
@@ -125,77 +136,86 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create campaign' }, { status: 500 });
     }
 
-    // Deduct from wallet
-    await supabase
-      .from('wallets')
+    await (supabase.from('wallets') as any)
       .update({ balance: (wallet.balance ?? 0) - totalCost })
       .eq('id', wallet.id);
 
-    // Record wallet transaction
-    await supabase.from('wallet_transactions').insert({
+    await (supabase.from('wallet_transactions') as any).insert({
       wallet_id: wallet.id,
       type: 'debit',
       amount: totalCost,
-      description: `Bulk SMS campaign (${recipients.length} recipients)`,
+      description: `Bulk SMS campaign (${eligible.length} recipients)`,
       reference: campaign.id,
       status: 'completed',
-    } as any);
+    });
 
-    // Insert recipients
-    const recipientRows = recipients.map((phone: string) => ({
+    const recipientRows = eligible.map((r) => ({
       campaign_id: campaign.id,
-      phone,
+      phone: r.phone,
       status: 'pending',
     }));
-    await supabase.from('sms_recipients').insert(recipientRows as any);
+    await (supabase.from('sms_recipients') as any).insert(recipientRows);
 
-    // If not scheduled, send immediately
     if (!scheduledAt) {
-      const result = await sendSMS({
-        to: recipients,
-        message,
-        senderId: senderConfig.sender_id,
-      });
+      // Group recipients by their resolved (rendered) message so we can batch-send.
+      const groups = new Map<string, RecipientRow[]>();
+      for (const r of eligible) {
+        const text = usesMergeFields ? applyMergeFields(message, r) : message;
+        const arr = groups.get(text) || [];
+        arr.push(r);
+        groups.set(text, arr);
+      }
 
-      // Update campaign stats
-      const sentCount = result.responses?.filter((r) => r.status === 'sent').length || 0;
-      const failedCount = result.responses?.filter((r) => r.status === 'failed').length || 0;
+      let totalSent = 0;
+      let totalFailed = 0;
 
-      await supabase
-        .from('sms_campaigns')
+      for (const [text, group] of groups) {
+        const result = await sendSMS({
+          to: group.map((g) => g.phone!).filter(Boolean),
+          message: text,
+          senderId: senderConfig.sender_id,
+        });
+
+        const sent = result.responses?.filter((r) => r.status === 'sent').length || 0;
+        const failed = result.responses?.filter((r) => r.status === 'failed').length || 0;
+        totalSent += sent;
+        totalFailed += failed;
+
+        if (result.responses) {
+          for (const r of result.responses) {
+            await (supabase
+              .from('sms_recipients') as any)
+              .update({
+                status: r.status === 'sent' ? 'sent' : 'failed',
+                sent_at: r.status === 'sent' ? new Date().toISOString() : null,
+                failure_reason: r.error || null,
+                at_message_id: r.messageId || null,
+              })
+              .eq('campaign_id', campaign.id)
+              .eq('phone', r.phone);
+          }
+        }
+      }
+
+      await (supabase.from('sms_campaigns') as any)
         .update({
           status: 'completed',
           sent_at: new Date().toISOString(),
-          sent_count: sentCount,
-          failed_count: failedCount,
+          sent_count: totalSent,
+          failed_count: totalFailed,
         })
         .eq('id', campaign.id);
-
-      // Update individual recipient statuses
-      if (result.responses) {
-        for (const r of result.responses) {
-          await supabase
-            .from('sms_recipients')
-            .update({
-              status: r.status === 'sent' ? 'sent' : 'failed',
-              sent_at: r.status === 'sent' ? new Date().toISOString() : null,
-              failure_reason: r.error || null,
-              at_message_id: r.messageId || null,
-            })
-            .eq('campaign_id', campaign.id)
-            .eq('phone', r.phone);
-        }
-      }
     }
 
     return NextResponse.json({
       campaignId: campaign.id,
-      recipientCount: recipients.length,
+      recipientCount: eligible.length,
       totalCost,
+      personalized: usesMergeFields,
       status: scheduledAt ? 'scheduled' : 'completed',
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('SMS send error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: error?.message || 'Internal server error' }, { status: 500 });
   }
 }

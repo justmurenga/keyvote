@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getApiCurrentUser } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
@@ -84,17 +85,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (poll.status !== 'active') {
+    const now = new Date();
+
+    // `status` is the authoritative source of truth. Admins explicitly move a
+    // poll into `active` (start immediately) regardless of the originally
+    // scheduled `start_time`, so we must not second-guess that here.
+    if (poll.status === 'scheduled') {
       return NextResponse.json(
-        { error: 'This poll is not currently active' },
+        { error: 'This poll has not started yet' },
         { status: 400 }
       );
     }
 
-    const now = new Date();
-    if (new Date(poll.start_time) > now) {
+    if (poll.status !== 'active') {
       return NextResponse.json(
-        { error: 'This poll has not started yet' },
+        { error: 'This poll is not currently active' },
         { status: 400 }
       );
     }
@@ -143,8 +148,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Record the vote (demographics are captured by trigger)
-    const { error: voteError } = await (supabase as any)
+    // Record the vote (demographics are captured by trigger).
+    // We use the admin (service-role) client because OTP-authenticated users
+    // do not have a Supabase auth.uid() session, which would otherwise cause
+    // the RLS INSERT policy on poll_votes to reject the row. All eligibility
+    // checks have already been performed above, and the database-level
+    // `enforce_voter_eligibility` trigger remains as a final safety net.
+    const adminSupabase = createAdminClient();
+    const { error: voteError } = await (adminSupabase as any)
       .from('poll_votes')
       .insert({
         poll_id: pollId,

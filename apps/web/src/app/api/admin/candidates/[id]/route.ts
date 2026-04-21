@@ -63,8 +63,8 @@ export async function GET(
       .from('candidates')
       .select(`
         *,
-        user:users!candidates_user_id_fkey(full_name, phone, email, profile_photo_url),
-        party:political_parties(id, name, abbreviation),
+        user:users!candidates_user_id_fkey(full_name, phone, email, profile_photo_url, bio, gender, age_bracket, created_at),
+        party:political_parties(id, name, abbreviation, symbol_url, primary_color, secondary_color),
         county:counties(name),
         constituency:constituencies(name),
         ward:wards(name)

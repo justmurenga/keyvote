@@ -155,17 +155,37 @@ export default function FollowingPage() {
   const fetchFollowing = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/candidates/follow');
-      
+      const response = await fetch('/api/candidates/follow', {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+
       if (response.ok) {
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         setCandidates(data.following || []);
       } else if (response.status === 401) {
         // Not authenticated
         setCandidates([]);
+      } else {
+        // Non-OK response: don't throw, just show empty state
+        console.warn(
+          `Failed to load following list (status ${response.status})`
+        );
+        setCandidates([]);
       }
     } catch (error) {
-      console.error('Failed to fetch following:', error);
+      // Network-level failure (server down, offline, request aborted, etc.).
+      // Use warn instead of error to avoid the Next.js dev error overlay.
+      console.warn('Could not reach follow API:', error);
+      setCandidates([]);
+      toast({
+        title: 'Connection issue',
+        description:
+          'Could not load the candidates you are following. Please check your connection and try again.',
+        variant: 'destructive',
+      });
     } finally {
       setIsLoading(false);
     }

@@ -2,16 +2,41 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Settings, User, Bell, Shield, Smartphone, Moon, Sun, Loader2 } from 'lucide-react';
+import { User, Bell, Shield, Smartphone, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
+interface ProfileData {
+  full_name: string | null;
+  phone: string | null;
+  email: string | null;
+  is_verified: boolean;
+}
+
+const NOTIF_PREFS_KEY = 'myvote.notificationPrefs.v1';
+
 export default function DashboardSettingsPage() {
-  const [smsNotifications, setSmsNotifications] = useState(true);
+  const [smsNotifications, setSmsNotifications] = useState(false);
   const [whatsappNotifications, setWhatsappNotifications] = useState(false);
   const [emailNotifications, setEmailNotifications] = useState(true);
-  const [profile, setProfile] = useState<{ full_name: string; phone: string; email: string | null; is_verified: boolean } | null>(null);
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Load notification preferences from localStorage on mount
+  useEffect(() => {
+    try {
+      const raw = typeof window !== 'undefined' ? window.localStorage.getItem(NOTIF_PREFS_KEY) : null;
+      if (raw) {
+        const prefs = JSON.parse(raw);
+        if (typeof prefs.sms === 'boolean') setSmsNotifications(prefs.sms);
+        if (typeof prefs.whatsapp === 'boolean') setWhatsappNotifications(prefs.whatsapp);
+        if (typeof prefs.email === 'boolean') setEmailNotifications(prefs.email);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -23,10 +48,29 @@ export default function DashboardSettingsPage() {
         }
       } catch {
         // Silently fail
+      } finally {
+        setLoading(false);
       }
     };
     fetchProfile();
   }, []);
+
+  const persistPrefs = (next: { sms?: boolean; whatsapp?: boolean; email?: boolean }) => {
+    try {
+      const merged = {
+        sms: next.sms ?? smsNotifications,
+        whatsapp: next.whatsapp ?? whatsappNotifications,
+        email: next.email ?? emailNotifications,
+      };
+      window.localStorage.setItem(NOTIF_PREFS_KEY, JSON.stringify(merged));
+    } catch {
+      // ignore
+    }
+  };
+
+  const hasPhone = Boolean(profile?.phone);
+  const hasEmail = Boolean(profile?.email);
+  const isPhoneVerified = hasPhone && Boolean(profile?.is_verified);
 
   return (
     <div className="space-y-6">
@@ -48,16 +92,34 @@ export default function DashboardSettingsPage() {
             <CardDescription>Your personal information</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="text-sm font-medium">Full Name</label>
-                <p className="text-muted-foreground">{profile?.full_name || 'Not set'}</p>
+            {loading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading profile…
               </div>
-              <div>
-                <label className="text-sm font-medium">Phone Number</label>
-                <p className="text-muted-foreground">{profile?.phone || 'Not set'}</p>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium">Full Name</label>
+                  <p className="text-muted-foreground">{profile?.full_name || 'Not set'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Phone Number</label>
+                  <p className="text-muted-foreground">
+                    {profile?.phone || 'Not set'}
+                    {hasPhone && isPhoneVerified && (
+                      <Badge variant="success" className="ml-2">Verified</Badge>
+                    )}
+                    {hasPhone && !isPhoneVerified && (
+                      <Badge variant="outline" className="ml-2">Unverified</Badge>
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Email Address</label>
+                  <p className="text-muted-foreground">{profile?.email || 'Not set'}</p>
+                </div>
               </div>
-            </div>
+            )}
             <Link href="/dashboard/profile">
               <Button variant="outline">Edit Profile</Button>
             </Link>
@@ -77,40 +139,67 @@ export default function DashboardSettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">SMS Notifications</p>
-                <p className="text-sm text-muted-foreground">Receive updates via SMS (charges apply)</p>
+                <p className="text-sm text-muted-foreground">
+                  {hasPhone
+                    ? 'Receive updates via SMS (charges apply)'
+                    : 'Add a phone number to enable SMS notifications'}
+                </p>
               </div>
-              <Button 
-                variant={smsNotifications ? 'default' : 'outline'}
+              <Button
+                variant={hasPhone && smsNotifications ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setSmsNotifications(!smsNotifications)}
+                disabled={!hasPhone}
+                onClick={() => {
+                  const next = !smsNotifications;
+                  setSmsNotifications(next);
+                  persistPrefs({ sms: next });
+                }}
               >
-                {smsNotifications ? 'Enabled' : 'Disabled'}
+                {hasPhone && smsNotifications ? 'Enabled' : 'Disabled'}
               </Button>
             </div>
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">WhatsApp Notifications</p>
-                <p className="text-sm text-muted-foreground">Receive updates via WhatsApp</p>
+                <p className="text-sm text-muted-foreground">
+                  {hasPhone
+                    ? 'Receive updates via WhatsApp'
+                    : 'Add a phone number to enable WhatsApp notifications'}
+                </p>
               </div>
-              <Button 
-                variant={whatsappNotifications ? 'default' : 'outline'}
+              <Button
+                variant={hasPhone && whatsappNotifications ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setWhatsappNotifications(!whatsappNotifications)}
+                disabled={!hasPhone}
+                onClick={() => {
+                  const next = !whatsappNotifications;
+                  setWhatsappNotifications(next);
+                  persistPrefs({ whatsapp: next });
+                }}
               >
-                {whatsappNotifications ? 'Enabled' : 'Disabled'}
+                {hasPhone && whatsappNotifications ? 'Enabled' : 'Disabled'}
               </Button>
             </div>
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">Email Notifications</p>
-                <p className="text-sm text-muted-foreground">Receive updates via email</p>
+                <p className="text-sm text-muted-foreground">
+                  {hasEmail
+                    ? 'Receive updates via email'
+                    : 'Add an email address to enable email notifications'}
+                </p>
               </div>
-              <Button 
-                variant={emailNotifications ? 'default' : 'outline'}
+              <Button
+                variant={hasEmail && emailNotifications ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setEmailNotifications(!emailNotifications)}
+                disabled={!hasEmail}
+                onClick={() => {
+                  const next = !emailNotifications;
+                  setEmailNotifications(next);
+                  persistPrefs({ email: next });
+                }}
               >
-                {emailNotifications ? 'Enabled' : 'Disabled'}
+                {hasEmail && emailNotifications ? 'Enabled' : 'Disabled'}
               </Button>
             </div>
           </CardContent>
@@ -129,16 +218,32 @@ export default function DashboardSettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">Phone Verification</p>
-                <p className="text-sm text-muted-foreground">Your phone is verified</p>
+                <p className="text-sm text-muted-foreground">
+                  {!hasPhone
+                    ? 'No phone number on file'
+                    : isPhoneVerified
+                      ? 'Your phone is verified'
+                      : 'Your phone number is not verified yet'}
+                </p>
               </div>
-              <Badge variant="success">Verified</Badge>
+              {!hasPhone ? (
+                <Link href="/dashboard/profile">
+                  <Button variant="outline" size="sm">Add Phone</Button>
+                </Link>
+              ) : isPhoneVerified ? (
+                <Badge variant="success">Verified</Badge>
+              ) : (
+                <Link href="/dashboard/profile">
+                  <Button variant="outline" size="sm">Verify</Button>
+                </Link>
+              )}
             </div>
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">Two-Factor Authentication</p>
                 <p className="text-sm text-muted-foreground">Add extra security to your account</p>
               </div>
-              <Button variant="outline" size="sm">Enable</Button>
+              <Badge variant="outline">Coming soon</Badge>
             </div>
           </CardContent>
         </Card>

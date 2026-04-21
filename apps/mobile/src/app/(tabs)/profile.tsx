@@ -184,7 +184,7 @@ export default function ProfileScreen() {
         Alert.alert('Wallet', 'Wallet feature coming soon!');
         break;
       case 'notifications':
-        Alert.alert('Notifications', 'Notification settings coming soon!');
+        router.push('/notifications');
         break;
       case 'help':
         Alert.alert('Help & Support', 'Contact support at support@myvote.ke');

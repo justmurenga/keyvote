@@ -188,11 +188,45 @@ export default function AdminPollsPage() {
     setIsSubmitting(true);
     setError(null);
 
+    // Client-side time validation. <input type="datetime-local"> emits a
+    // string like "2026-04-22T08:30" in the *browser's* local timezone with
+    // no offset. We must parse it as local and serialise to ISO (UTC) before
+    // sending so the server doesn't reinterpret it in its own timezone.
+    const startLocal = formData.start_time ? new Date(formData.start_time) : null;
+    const endLocal = formData.end_time ? new Date(formData.end_time) : null;
+
+    if (!startLocal || !endLocal || isNaN(startLocal.getTime()) || isNaN(endLocal.getTime())) {
+      setError('Please choose a valid start and end time');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const durationMs = endLocal.getTime() - startLocal.getTime();
+    if (durationMs < 5 * 60 * 1000) {
+      setError('Poll must run for at least 5 minutes');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (formData.status === 'scheduled' && startLocal.getTime() < Date.now() - 60_000) {
+      setError('Scheduled polls must start in the future');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const payload = {
+      ...formData,
+      title: formData.title.trim(),
+      description: formData.description.trim(),
+      start_time: startLocal.toISOString(),
+      end_time: endLocal.toISOString(),
+    };
+
     try {
       const response = await fetch('/api/admin/polls', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
@@ -278,17 +312,61 @@ export default function AdminPollsPage() {
     });
   };
 
-  // Set default dates for new poll
+  // Format a Date as the value expected by <input type="datetime-local">
+  // ("YYYY-MM-DDTHH:mm") in the *browser's local* timezone — NOT UTC.
+  const toLocalInputValue = (d: Date) => {
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+      `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
+  };
+
+  // Round a date up to the next 30-minute boundary for cleaner defaults.
+  const roundUpToHalfHour = (d: Date) => {
+    const rounded = new Date(d);
+    rounded.setSeconds(0, 0);
+    const minutes = rounded.getMinutes();
+    rounded.setMinutes(minutes + ((30 - (minutes % 30)) % 30 || 30));
+    return rounded;
+  };
+
+  // Set default dates for new poll: starts tomorrow at 09:00 local, ends a
+  // week later at the same time.
   const getDefaultDates = () => {
-    const now = new Date();
-    const start = new Date(now.getTime() + 24 * 60 * 60 * 1000); // Tomorrow
-    const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000); // 1 week later
-    
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
+    const start = tomorrow;
+    const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+
     return {
-      start: start.toISOString().slice(0, 16),
-      end: end.toISOString().slice(0, 16),
+      start: toLocalInputValue(start),
+      end: toLocalInputValue(end),
     };
   };
+
+  // Minimum value allowed for the start-time picker (now, rounded up).
+  const minStartValue = toLocalInputValue(roundUpToHalfHour(new Date()));
+
+  // Friendly duration string for the currently selected window.
+  const durationLabel = (() => {
+    if (!formData.start_time || !formData.end_time) return null;
+    const s = new Date(formData.start_time).getTime();
+    const e = new Date(formData.end_time).getTime();
+    if (isNaN(s) || isNaN(e) || e <= s) return null;
+    const totalMinutes = Math.round((e - s) / 60000);
+    const days = Math.floor(totalMinutes / (60 * 24));
+    const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+    const minutes = totalMinutes % 60;
+    const parts: string[] = [];
+    if (days) parts.push(`${days}d`);
+    if (hours) parts.push(`${hours}h`);
+    if (minutes) parts.push(`${minutes}m`);
+    return parts.join(' ') || '0m';
+  })();
+
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   useEffect(() => {
     if (isCreateDialogOpen && !formData.start_time) {
@@ -485,27 +563,98 @@ export default function AdminPollsPage() {
                 )}
 
                 {/* Schedule */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="start_time">Start Time *</Label>
-                    <Input
-                      id="start_time"
-                      type="datetime-local"
-                      value={formData.start_time}
-                      onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
-                      required
-                    />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Schedule *</Label>
+                    <span className="text-xs text-muted-foreground">
+                      Times shown in <strong>{browserTz}</strong>
+                    </span>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="end_time">End Time *</Label>
-                    <Input
-                      id="end_time"
-                      type="datetime-local"
-                      value={formData.end_time}
-                      onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))}
-                      required
-                    />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="start_time" className="text-xs text-muted-foreground">
+                        Start
+                      </Label>
+                      <Input
+                        id="start_time"
+                        type="datetime-local"
+                        min={formData.status === 'scheduled' ? minStartValue : undefined}
+                        step={300}
+                        value={formData.start_time}
+                        onChange={(e) => {
+                          const newStart = e.target.value;
+                          setFormData(prev => {
+                            // If the new start is after the current end, push the
+                            // end forward by 7 days from the new start so the
+                            // window stays valid.
+                            const startMs = new Date(newStart).getTime();
+                            const endMs = prev.end_time ? new Date(prev.end_time).getTime() : 0;
+                            const next = { ...prev, start_time: newStart };
+                            if (!isNaN(startMs) && (!endMs || endMs <= startMs)) {
+                              next.end_time = toLocalInputValue(
+                                new Date(startMs + 7 * 24 * 60 * 60 * 1000)
+                              );
+                            }
+                            return next;
+                          });
+                        }}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="end_time" className="text-xs text-muted-foreground">
+                        End
+                      </Label>
+                      <Input
+                        id="end_time"
+                        type="datetime-local"
+                        min={formData.start_time || minStartValue}
+                        step={300}
+                        value={formData.end_time}
+                        onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))}
+                        required
+                      />
+                    </div>
                   </div>
+
+                  {/* Quick duration presets */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <span className="text-xs text-muted-foreground mr-1">Quick set:</span>
+                    {[
+                      { label: '1 hour', ms: 60 * 60 * 1000 },
+                      { label: '1 day', ms: 24 * 60 * 60 * 1000 },
+                      { label: '3 days', ms: 3 * 24 * 60 * 60 * 1000 },
+                      { label: '1 week', ms: 7 * 24 * 60 * 60 * 1000 },
+                      { label: '1 month', ms: 30 * 24 * 60 * 60 * 1000 },
+                    ].map(preset => (
+                      <Button
+                        key={preset.label}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => {
+                          const start = formData.start_time
+                            ? new Date(formData.start_time)
+                            : roundUpToHalfHour(new Date());
+                          const end = new Date(start.getTime() + preset.ms);
+                          setFormData(prev => ({
+                            ...prev,
+                            start_time: toLocalInputValue(start),
+                            end_time: toLocalInputValue(end),
+                          }));
+                        }}
+                      >
+                        {preset.label}
+                      </Button>
+                    ))}
+                  </div>
+
+                  {durationLabel && (
+                    <p className="text-xs text-muted-foreground">
+                      Duration: <strong>{durationLabel}</strong>
+                    </p>
+                  )}
                 </div>
 
                 {/* Status */}

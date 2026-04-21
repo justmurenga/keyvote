@@ -40,6 +40,9 @@ export async function GET(request: NextRequest) {
         ward_id,
         is_party_nomination,
         party:political_parties(id, name, abbreviation),
+        county:counties(id, name),
+        constituency:constituencies(id, name),
+        ward:wards(id, name),
         created_at
       `, { count: 'exact' })
       .in('status', ['active', 'completed', 'scheduled']);
@@ -152,6 +155,20 @@ export async function GET(request: NextRequest) {
         options,
         isPartyNomination: poll.is_party_nomination,
         party: poll.party,
+        region: poll.ward?.name
+          || poll.constituency?.name
+          || poll.county?.name
+          || 'National',
+        regionLevel: poll.ward_id
+          ? 'ward'
+          : poll.constituency_id
+            ? 'constituency'
+            : poll.county_id
+              ? 'county'
+              : 'national',
+        county: poll.county,
+        constituency: poll.constituency,
+        ward: poll.ward,
       };
     }));
 

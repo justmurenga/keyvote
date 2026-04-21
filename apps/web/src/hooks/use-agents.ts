@@ -26,8 +26,9 @@ export interface AgentData {
 }
 
 export interface InviteAgentPayload {
-  phone: string;
-  name: string;
+  userId?: string;
+  phone?: string;
+  name?: string;
   regionType: string;
   pollingStationId?: string;
   wardId?: string;
@@ -49,7 +50,7 @@ interface UseAgentsReturn {
     revoked: number;
   };
   refresh: () => Promise<void>;
-  inviteAgent: (payload: InviteAgentPayload) => Promise<{ success: boolean; error?: string; acceptUrl?: string }>;
+  inviteAgent: (payload: InviteAgentPayload) => Promise<{ success: boolean; error?: string; acceptUrl?: string; notified?: boolean }>;
   revokeAgent: (agentId: string, reason?: string) => Promise<{ success: boolean; error?: string }>;
   updateAgent: (agentId: string, data: Record<string, any>) => Promise<{ success: boolean; error?: string }>;
   deleteAgent: (agentId: string) => Promise<{ success: boolean; error?: string }>;
@@ -115,7 +116,7 @@ export function useAgents(statusFilter?: string): UseAgentsReturn {
       // Refresh the agent list
       await fetchAgents();
 
-      return { success: true, acceptUrl: data.acceptUrl };
+      return { success: true, acceptUrl: data.acceptUrl, notified: data.notified };
     } catch {
       return { success: false, error: 'Failed to invite agent' };
     }

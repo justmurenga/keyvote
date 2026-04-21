@@ -140,6 +140,7 @@ export function CandidateCard({
           initialIsFollowing={isFollowing}
           followerCount={followerCount}
           className="w-full"
+          redirectAfterFollow="/dashboard/following"
         />
       </CardFooter>
     </Card>

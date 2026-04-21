@@ -104,22 +104,65 @@ export async function GET() {
       locationNames.county_name = (county as any)?.name ?? null;
     }
 
-    // Calculate profile completeness
-    const requiredFields = [
+    // If the user is a candidate, fetch candidate-specific fields so the
+    // profile page can require things like slogan / manifesto for "100%" completion.
+    let candidate: Record<string, any> | null = null;
+    if (profile.role === 'candidate') {
+      const { data: candidateRow } = await (adminClient as any)
+        .from('candidates')
+        .select(
+          'id, position, party_id, is_independent, campaign_slogan, manifesto_text, manifesto_pdf_url, campaign_video_url, facebook_url, twitter_url, instagram_url, tiktok_url, is_verified, verification_status'
+        )
+        .eq('user_id', userId)
+        .maybeSingle();
+      candidate = (candidateRow as Record<string, any>) || null;
+    }
+
+    // Build the completion calculation. Voters and candidates have different
+    // sets of required fields. Profile photo is required for candidates and
+    // optional (but counted) for voters.
+    const userRequiredFields = [
       'full_name',
       'phone',
       'gender',
       'age_bracket',
       'polling_station_id',
     ];
-    const optionalFields = ['email', 'bio'];
+    const userOptionalFields = ['email', 'bio', 'profile_photo_url'];
 
-    const completedRequired = requiredFields.filter(
-      (f) => profile[f as keyof typeof profile] != null
-    ).length;
-    const completedOptional = optionalFields.filter(
-      (f) => profile[f as keyof typeof profile] != null
-    ).length;
+    const candidateRequiredFields = candidate
+      ? ['campaign_slogan', 'manifesto_text', 'profile_photo_url', 'party_or_independent']
+      : [];
+    const candidateOptionalFields = candidate
+      ? ['manifesto_pdf_url', 'campaign_video_url']
+      : [];
+
+    const isFieldFilled = (field: string): boolean => {
+      if (field === 'party_or_independent') {
+        return Boolean(candidate?.party_id) || candidate?.is_independent === true;
+      }
+      if (field === 'profile_photo_url') {
+        return Boolean(profile.profile_photo_url);
+      }
+      if (
+        field === 'campaign_slogan' ||
+        field === 'manifesto_text' ||
+        field === 'manifesto_pdf_url' ||
+        field === 'campaign_video_url'
+      ) {
+        const value = candidate?.[field];
+        return typeof value === 'string' ? value.trim().length > 0 : value != null;
+      }
+      const value = profile[field as keyof typeof profile];
+      if (typeof value === 'string') return value.trim().length > 0;
+      return value != null;
+    };
+
+    const requiredFields = [...userRequiredFields, ...candidateRequiredFields];
+    const optionalFields = [...userOptionalFields, ...candidateOptionalFields];
+
+    const completedRequired = requiredFields.filter(isFieldFilled).length;
+    const completedOptional = optionalFields.filter(isFieldFilled).length;
     const totalFields = requiredFields.length + optionalFields.length;
     const completedFields = completedRequired + completedOptional;
     const completionPercentage = Math.round(
@@ -127,18 +170,15 @@ export async function GET() {
     );
 
     const missingFields = [
-      ...requiredFields.filter(
-        (f) => profile[f as keyof typeof profile] == null
-      ),
-      ...optionalFields.filter(
-        (f) => profile[f as keyof typeof profile] == null
-      ),
+      ...requiredFields.filter((f) => !isFieldFilled(f)),
+      ...optionalFields.filter((f) => !isFieldFilled(f)),
     ];
 
     return NextResponse.json({
       profile: {
         ...profile,
         ...locationNames,
+        candidate,
       },
       completion: {
         percentage: completionPercentage,
@@ -146,6 +186,8 @@ export async function GET() {
         totalFields,
         missingFields,
         isComplete: completionPercentage === 100,
+        requiredFields,
+        optionalFields,
       },
     });
   } catch (error) {

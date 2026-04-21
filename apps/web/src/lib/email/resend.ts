@@ -46,7 +46,14 @@ export async function sendEmail(options: SendEmailOptions): Promise<EmailRespons
     });
 
     if (error) {
-      console.error('[email] Resend error:', error);
+      console.error('[email] Resend error:', {
+        name: (error as { name?: string }).name,
+        message: error.message,
+        statusCode: (error as { statusCode?: number }).statusCode,
+        from: options.from || DEFAULT_FROM,
+        to: recipients,
+        raw: error,
+      });
       return {
         success: false,
         error: error.message || 'Failed to send email',
