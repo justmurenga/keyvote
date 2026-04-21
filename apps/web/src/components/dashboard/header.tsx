@@ -48,7 +48,17 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
       <div className="flex h-16 items-center justify-between px-4 lg:px-6">
         {/* Logo */}
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" className="lg:hidden">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="lg:hidden"
+            aria-label="Open navigation menu"
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('myvote:toggle-sidebar'));
+              }
+            }}
+          >
             <Menu className="h-5 w-5" />
           </Button>
           <Link href="/dashboard" className="flex items-center space-x-2">
