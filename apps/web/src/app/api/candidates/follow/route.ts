@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveUserId } from '@/lib/auth/get-user';
+import { requireNationalEntitlement } from '@/lib/entitlements/national';
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,9 +37,9 @@ export async function POST(request: NextRequest) {
     // Check if candidate exists
     const { data: candidate, error: candidateError } = await admin
       .from('candidates')
-      .select('id, user_id')
+      .select('id, user_id, position')
       .eq('id', candidateId)
-      .single() as { data: { id: string; user_id: string } | null; error: any };
+      .single() as { data: { id: string; user_id: string; position: string } | null; error: any };
 
     if (candidateError || !candidate) {
       return NextResponse.json(
@@ -53,6 +54,22 @@ export async function POST(request: NextRequest) {
         { error: 'You cannot follow yourself' },
         { status: 400 }
       );
+    }
+
+    // National / presidential paywall — only billed when actively following
+    // (unfollow remains free so users can always disengage).
+    if (action === 'follow' && candidate.position === 'president') {
+      const { data: meRow } = await admin
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .single() as { data: { role: string } | null; error: any };
+      const gate = await requireNationalEntitlement(
+        userId,
+        meRow?.role,
+        'national_candidates_access',
+      );
+      if (gate) return gate;
     }
 
     if (action === 'follow') {

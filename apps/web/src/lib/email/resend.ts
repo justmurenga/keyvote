@@ -6,7 +6,7 @@ const resendApiKey = process.env.RESEND_API_KEY;
 
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
-const DEFAULT_FROM = process.env.EMAIL_FROM || 'myVote Kenya <noreply@myvote.ke>';
+const DEFAULT_FROM = process.env.EMAIL_FROM || 'myVote Kenya <noreply@keyvote.online>';
 
 export interface SendEmailOptions {
   to: string | string[];

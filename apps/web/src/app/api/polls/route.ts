@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getApiCurrentUser } from '@/lib/auth/get-user';
+import { requireNationalEntitlement } from '@/lib/entitlements/national';
 import type { ElectoralPosition, PollStatus } from '@myvote/database';
 
 const POSITION_LABELS: Record<string, string> = {
@@ -15,6 +17,7 @@ const POSITION_LABELS: Record<string, string> = {
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
+    const adminSupabase = createAdminClient();
     const { searchParams } = new URL(request.url);
 
     const position = searchParams.get('position');
@@ -22,6 +25,31 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
+
+    // ---- National / presidential paywall ----
+    // When the caller explicitly filters for the presidential race, require
+    // an active `national_polls_access` subscription (admins / staff bypass).
+    if (position === 'president') {
+      const currentUser = await getApiCurrentUser(supabase);
+      if (!currentUser?.id) {
+        return NextResponse.json(
+          { error: 'Authentication required' },
+          { status: 401 },
+        );
+      }
+      const adminClient = createAdminClient();
+      const { data: meRow } = await adminClient
+        .from('users')
+        .select('role')
+        .eq('id', currentUser.id)
+        .single() as { data: { role: string } | null; error: any };
+      const gate = await requireNationalEntitlement(
+        currentUser.id,
+        meRow?.role,
+        'national_polls_access',
+      );
+      if (gate) return gate;
+    }
 
     // Build query for active/completed/scheduled polls (public view)
     let query = supabase
@@ -78,7 +106,7 @@ export async function GET(request: NextRequest) {
     let userVotes: Record<string, string> = {};
 
     if (userId) {
-      const { data: votes } = await supabase
+      const { data: votes } = await adminSupabase
         .from('poll_votes')
         .select('poll_id, candidate_id')
         .eq('voter_id', userId) as { data: Array<{ poll_id: string; candidate_id: string }> | null; error: any };
@@ -116,7 +144,7 @@ export async function GET(request: NextRequest) {
       const { data: candidates } = await candidatesQuery as { data: any[] | null; error: any };
 
       // Get vote counts for this poll
-      const { data: voteData } = await supabase
+      const { data: voteData } = await adminSupabase
         .from('poll_votes')
         .select('candidate_id')
         .eq('poll_id', poll.id) as { data: Array<{ candidate_id: string }> | null; error: any };

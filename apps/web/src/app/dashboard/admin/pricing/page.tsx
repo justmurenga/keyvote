@@ -51,12 +51,31 @@ export default function AdminPricingPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/pricing', {
+      const items = pricing.map((service) => ({
+        id: service.type,
+        name: service.description || formatServiceName(service.type),
+        description: service.description || formatServiceName(service.type),
+        price: Number(service.amount) || 0,
+        is_active: true,
+      }));
+
+      const res = await fetch('/api/admin/billable-items', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pricing }),
+        body: JSON.stringify({ items }),
       });
-      if (!res.ok) throw new Error('Failed to save');
+
+      if (!res.ok) {
+        let message = 'Failed to save';
+        try {
+          const data = await res.json();
+          message = data?.error || message;
+        } catch {
+          // no-op: keep default message
+        }
+        throw new Error(message);
+      }
+
       setSuccess('Pricing updated successfully!');
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {

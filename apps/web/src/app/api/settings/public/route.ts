@@ -20,7 +20,7 @@ export async function GET() {
     return NextResponse.json({
       supportPhone: supportPhone || '+254 700 000 000',
       ussdCode: ussdCode || '*123#',
-      supportEmail: supportEmail || 'support@myvote.co.ke',
+      supportEmail: supportEmail || 'support@keyvote.online',
       siteName: siteName || 'myVote Kenya',
     }, {
       headers: {
@@ -33,7 +33,7 @@ export async function GET() {
     return NextResponse.json({
       supportPhone: '+254 700 000 000',
       ussdCode: '*123#',
-      supportEmail: 'support@myvote.co.ke',
+      supportEmail: 'support@keyvote.online',
       siteName: 'myVote Kenya',
     });
   }

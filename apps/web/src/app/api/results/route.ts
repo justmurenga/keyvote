@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { resolveUserId } from '@/lib/auth/get-user';
+import { hasActiveEntitlement } from '@/lib/entitlements';
+import { requireNationalEntitlement } from '@/lib/entitlements/national';
 import type { ElectoralPosition } from '@myvote/database';
 
 const POSITION_LABELS: Record<string, string> = {
@@ -19,6 +23,70 @@ export async function GET(request: NextRequest) {
     const position = searchParams.get('position') || 'president';
     const regionType = searchParams.get('regionType');
     const regionId = searchParams.get('regionId');
+    // regionMode:
+    //   "own"     (default) — restrict aggregation to current user's county
+    //                         (or national for presidential).
+    //   "outside" — allow other regions. Requires `outside_region_results`.
+    const regionMode = (searchParams.get('regionMode') || 'own').toLowerCase();
+
+    // Auth + role / region context
+    const currentUserId = await resolveUserId(supabase);
+    if (!currentUserId) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 },
+      );
+    }
+
+    const admin = createAdminClient();
+    const { data: meRow } = await admin
+      .from('users')
+      .select('county_id, role')
+      .eq('id', currentUserId)
+      .single() as { data: { county_id: string | null; role: string } | null; error: any };
+    const myCountyId = meRow?.county_id || null;
+    const myRole = meRow?.role || 'voter';
+    const bypassPaywall = ['system_admin', 'admin', 'staff'].includes(myRole);
+
+    // ---- National / presidential paywall ----
+    // Presidential results are national-tier content. Require an active
+    // `national_results_access` subscription (admins / staff bypass).
+    if (position === 'president' && !bypassPaywall) {
+      const gate = await requireNationalEntitlement(
+        currentUserId,
+        myRole,
+        'national_results_access',
+      );
+      if (gate) return gate;
+    }
+
+    if (regionMode === 'outside') {
+      if (!bypassPaywall) {
+        const allowed = await hasActiveEntitlement(
+          currentUserId,
+          'outside_region_results',
+        );
+        if (!allowed) {
+          return NextResponse.json(
+            {
+              error: 'paywall',
+              message:
+                'Viewing election results outside your region is a paid feature.',
+              paywall: {
+                itemId: 'outside_region_results',
+                title: 'View results outside your region',
+                description:
+                  'Unlock 30 days of access to election results, opinion polls and followership analytics for any region in Kenya.',
+                price: 100,
+                validity_days: 30,
+                topup_url: '/dashboard/wallet',
+              },
+            },
+            { status: 402 },
+          );
+        }
+      }
+    }
 
     // Get election result submissions grouped by position and region
     let query = supabase
@@ -72,6 +140,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Filter submissions client-side by region scope (data is small / paginated server-side later)
+    const inOwnCounty = (sub: any) =>
+      sub?.polling_station?.ward?.constituency?.county?.id === myCountyId;
+    const filteredSubmissions = (submissions || []).filter((sub: any) => {
+      // Presidential is always national — no region scoping needed.
+      if (position === 'president') return true;
+
+      if (regionMode === 'own') {
+        if (!myCountyId) return true; // user has no region — show all (rare)
+        return inOwnCounty(sub);
+      }
+      // outside
+      if (!myCountyId) return true;
+      return !inOwnCounty(sub);
+    });
+
     // Get total polling stations for the position
     let totalStationsQuery = supabase
       .from('polling_stations')
@@ -92,10 +176,10 @@ export async function GET(request: NextRequest) {
 
     const reportingStations = new Set<string>();
 
-    submissions?.forEach((submission: any) => {
+    filteredSubmissions?.forEach((submission: any) => {
       const candidate = submission.candidate;
       const pollingStation = submission.polling_station;
-      
+
       if (!candidate) return;
 
       reportingStations.add(pollingStation.id);
@@ -157,6 +241,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       results: [result],
+      regionMode,
+      myCountyId,
     });
   } catch (error) {
     console.error('Results API error:', error);

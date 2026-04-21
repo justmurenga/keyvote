@@ -110,7 +110,7 @@ export class UssdHandler {
    */
   private async handlePollingStation(user: unknown, inputs: string[]): Promise<string> {
     if (!user) {
-      return 'END You are not registered. Please register on myvote.ke or call 0800 123 456.';
+      return 'END You are not registered. Please register on keyvote.online or call 0800 123 456.';
     }
 
     const userData = user as Tables['users']['Row'] & {
@@ -130,7 +130,7 @@ export class UssdHandler {
     if (!userData.polling_station) {
       return `END Your polling station is not set.
       
-Visit myvote.ke or call 0800 123 456 to update your profile.`;
+Visit keyvote.online or call 0800 123 456 to update your profile.`;
     }
 
     const ps = userData.polling_station;
@@ -147,7 +147,7 @@ Ward: ${ward}
 Constituency: ${constituency}
 County: ${county}
 
-For more details, visit myvote.ke`;
+For more details, visit keyvote.online`;
   }
 
   /**
@@ -155,7 +155,7 @@ For more details, visit myvote.ke`;
    */
   private async handleFollowCandidate(user: unknown, inputs: string[]): Promise<string> {
     if (!user) {
-      return 'END Please register first at myvote.ke to follow candidates.';
+      return 'END Please register first at keyvote.online to follow candidates.';
     }
 
     const positions: { key: string; value: ElectoralPosition; label: string }[] = [
@@ -197,7 +197,7 @@ ${positions.map((p) => `${p.key}. ${p.label}`).join('\n')}
     if (!candidates || candidates.length === 0) {
       return `END No verified candidates found for ${position.label}.
 
-Check back later or visit myvote.ke`;
+Check back later or visit keyvote.online`;
     }
 
     // Show candidates
@@ -236,7 +236,7 @@ ${candidateList}
       const name = selectedCandidate.user?.full_name || 'Unknown';
       return `END You are already following ${name}.
 
-Manage follows at myvote.ke`;
+Manage follows at keyvote.online`;
     }
 
     // Create follow
@@ -256,7 +256,7 @@ You will receive updates via SMS.`;
    */
   private async handlePolls(user: unknown, inputs: string[]): Promise<string> {
     if (!user) {
-      return 'END Please register first at myvote.ke to participate in polls.';
+      return 'END Please register first at keyvote.online to participate in polls.';
     }
 
     const userData = user as Tables['users']['Row'];
@@ -269,12 +269,12 @@ You will receive updates via SMS.`;
     if (!(userData as any).is_verified) {
       return `END Please verify your account details before voting.
 
-Visit myvote.ke or dial *XXX# to complete verification.`;
+Visit keyvote.online or dial *XXX# to complete verification.`;
     }
     if (!(userData as any).polling_station_id) {
       return `END Please set your polling station / location in your profile before voting.
 
-Visit myvote.ke to update your location.`;
+Visit keyvote.online to update your location.`;
     }
 
     // Get active polls
@@ -289,7 +289,7 @@ Visit myvote.ke to update your location.`;
     if (!polls || polls.length === 0) {
       return `END No active polls available.
 
-Check back later or visit myvote.ke`;
+Check back later or visit keyvote.online`;
     }
 
     // Show poll list
@@ -353,7 +353,7 @@ ${optionList}
 
 You voted: ${options[optionIndex]}
 
-View full results at myvote.ke`;
+View full results at keyvote.online`;
   }
 
   /**
@@ -366,7 +366,7 @@ View full results at myvote.ke`;
 
 Results will be available during election period.
 
-Visit myvote.ke for live updates and detailed analysis.`;
+Visit keyvote.online for live updates and detailed analysis.`;
   }
 
   /**
@@ -374,7 +374,7 @@ Visit myvote.ke for live updates and detailed analysis.`;
    */
   private async handleWallet(user: unknown, inputs: string[]): Promise<string> {
     if (!user) {
-      return 'END Please register first at myvote.ke to use wallet features.';
+      return 'END Please register first at keyvote.online to use wallet features.';
     }
 
     const userData = user as Tables['users']['Row'];
@@ -442,7 +442,7 @@ Your wallet will be credited automatically.`;
 
 ${txList}
 
-Full history at myvote.ke`;
+Full history at keyvote.online`;
 
       default:
         return 'END Invalid option.';
@@ -461,7 +461,7 @@ Full history at myvote.ke`;
       return `END Not registered.
 
 To register:
-1. Visit myvote.ke
+1. Visit keyvote.online
 2. Call 0800 123 456
 3. WhatsApp: +254 700 000 000`;
     }
@@ -488,13 +488,13 @@ Name: ${name}
 Phone: ${phone}
 Role: ${userData.role || 'Voter'}
 
-Edit profile at myvote.ke`;
+Edit profile at keyvote.online`;
 
       case '2':
         // Update location (simplified)
         return `END To update your location:
 
-1. Visit myvote.ke
+1. Visit keyvote.online
 2. Go to Profile > Settings
 3. Update Polling Station
 
@@ -529,6 +529,6 @@ Dial *123# to access:
 Support:
 Tel: 0800 123 456
 WhatsApp: +254 700 000 000
-Web: myvote.ke`;
+Web: keyvote.online`;
   }
 }

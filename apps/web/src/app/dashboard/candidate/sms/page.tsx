@@ -10,8 +10,24 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Send, MessageSquare, Clock, CheckCircle2, AlertCircle, Loader2,
   Users, Filter, Wallet, Info, MapPin, UserCheck, Megaphone, Hash,
+  Eye, XCircle, Search,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  Legend,
+} from 'recharts';
 
 interface Campaign {
   id: string;
@@ -127,6 +143,91 @@ export default function CandidateSMSPage() {
 
   const [activeTab, setActiveTab] = useState<'compose' | 'history'>('compose');
   const messageRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Campaign detail modal
+  interface RecipientRow {
+    id: string;
+    phone: string;
+    full_name: string | null;
+    status: string;
+    sent_at: string | null;
+    delivered_at: string | null;
+    failure_reason: string | null;
+  }
+  const [detailCampaign, setDetailCampaign] = useState<Campaign | null>(null);
+  const [detailStats, setDetailStats] = useState<{
+    total: number; sent: number; delivered: number; failed: number; pending: number;
+  } | null>(null);
+  const [detailRecipients, setDetailRecipients] = useState<RecipientRow[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailStatusFilter, setDetailStatusFilter] = useState<'all' | 'delivered' | 'sent' | 'failed' | 'pending'>('all');
+  const [detailSearch, setDetailSearch] = useState('');
+
+  const openCampaignDetail = async (c: Campaign) => {
+    setDetailCampaign(c);
+    setDetailStats(null);
+    setDetailRecipients([]);
+    setDetailStatusFilter('all');
+    setDetailSearch('');
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/sms/campaigns/${c.id}`);
+      const data = await res.json();
+      if (res.ok) {
+        setDetailStats(data.stats || null);
+        setDetailRecipients(data.recipients || []);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeCampaignDetail = () => {
+    setDetailCampaign(null);
+    setDetailStats(null);
+    setDetailRecipients([]);
+  };
+
+  const filteredRecipients = useMemo(() => {
+    const q = detailSearch.trim().toLowerCase();
+    return detailRecipients.filter((r) => {
+      if (detailStatusFilter !== 'all' && r.status !== detailStatusFilter) return false;
+      if (!q) return true;
+      return (
+        r.phone.toLowerCase().includes(q) ||
+        (r.full_name || '').toLowerCase().includes(q)
+      );
+    });
+  }, [detailRecipients, detailStatusFilter, detailSearch]);
+
+  const exportRecipientsCsv = () => {
+    if (!detailCampaign) return;
+    const rows = [
+      ['Name', 'Phone', 'Status', 'Sent At', 'Delivered At', 'Failure Reason'],
+      ...filteredRecipients.map((r) => [
+        r.full_name || '',
+        r.phone,
+        r.status,
+        r.sent_at ? new Date(r.sent_at).toISOString() : '',
+        r.delivered_at ? new Date(r.delivered_at).toISOString() : '',
+        (r.failure_reason || '').replace(/\s+/g, ' '),
+      ]),
+    ];
+    const csv = rows
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `campaign-${detailCampaign.id}-recipients.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const fetchCampaigns = useCallback(async () => {
     try {
@@ -645,11 +746,16 @@ export default function CandidateSMSPage() {
                       <th className="text-left py-3 px-2 font-medium">Delivery</th>
                       <th className="text-left py-3 px-2 font-medium">Cost</th>
                       <th className="text-left py-3 px-2 font-medium">Status</th>
+                      <th className="text-right py-3 px-2 font-medium">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {campaigns.map((c) => (
-                      <tr key={c.id} className="border-b hover:bg-muted/50">
+                      <tr
+                        key={c.id}
+                        className="border-b hover:bg-muted/50 cursor-pointer"
+                        onClick={() => openCampaignDetail(c)}
+                      >
                         <td className="py-3 px-2 text-muted-foreground whitespace-nowrap">
                           {new Date(c.created_at).toLocaleDateString()}<br />
                           <span className="text-xs">{new Date(c.created_at).toLocaleTimeString()}</span>
@@ -665,6 +771,20 @@ export default function CandidateSMSPage() {
                         </td>
                         <td className="py-3 px-2 whitespace-nowrap">KES {(c.total_cost || 0).toFixed(2)}</td>
                         <td className="py-3 px-2">{getStatusBadge(c.status)}</td>
+                        <td className="py-3 px-2 text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openCampaignDetail(c);
+                            }}
+                            aria-label="View campaign details"
+                            title="View details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -674,6 +794,262 @@ export default function CandidateSMSPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Campaign detail dialog */}
+      <Dialog open={!!detailCampaign} onOpenChange={(open) => !open && closeCampaignDetail()}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Campaign Details</DialogTitle>
+            <DialogDescription>
+              {detailCampaign
+                ? `Sent ${new Date(detailCampaign.created_at).toLocaleString()} · Sender ${detailCampaign.sender_id_name}`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailLoading || !detailStats ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {/* Message card */}
+              <div className="rounded-lg border bg-muted/40 p-3 text-sm whitespace-pre-wrap">
+                {detailCampaign?.message}
+              </div>
+
+              {/* Summary + pie chart */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-lg border p-4">
+                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" /> Delivery Breakdown
+                  </h4>
+                  {(() => {
+                    const total = detailStats.total || 0;
+                    const delivered = detailStats.delivered;
+                    const sent = detailStats.sent;
+                    const failed = detailStats.failed;
+                    const pending = detailStats.pending;
+                    const pct = (n: number) => (total ? Math.round((n / total) * 1000) / 10 : 0);
+                    const data = [
+                      { name: 'Delivered', value: delivered, color: '#16a34a' },
+                      { name: 'Sent', value: sent, color: '#2563eb' },
+                      { name: 'Failed', value: failed, color: '#dc2626' },
+                      { name: 'Pending', value: pending, color: '#a3a3a3' },
+                    ].filter((d) => d.value > 0);
+
+                    return (
+                      <>
+                        <div className="h-52">
+                          {total === 0 ? (
+                            <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+                              No recipients yet.
+                            </div>
+                          ) : (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={data}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={40}
+                                  outerRadius={75}
+                                  paddingAngle={2}
+                                  label={(entry: any) =>
+                                    `${entry.name} ${pct(entry.value)}%`
+                                  }
+                                  labelLine={false}
+                                >
+                                  {data.map((entry) => (
+                                    <Cell key={entry.name} fill={entry.color} />
+                                  ))}
+                                </Pie>
+                                <Tooltip
+                                  formatter={(value: any, name: any) => [
+                                    `${value} (${pct(Number(value))}%)`,
+                                    name,
+                                  ]}
+                                />
+                                <Legend verticalAlign="bottom" height={24} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs mt-2">
+                          <div className="flex items-center justify-between rounded bg-green-50 dark:bg-green-900/20 px-2 py-1">
+                            <span className="text-green-700 dark:text-green-300">Delivered</span>
+                            <span className="font-semibold">{delivered} · {pct(delivered)}%</span>
+                          </div>
+                          <div className="flex items-center justify-between rounded bg-blue-50 dark:bg-blue-900/20 px-2 py-1">
+                            <span className="text-blue-700 dark:text-blue-300">Sent</span>
+                            <span className="font-semibold">{sent} · {pct(sent)}%</span>
+                          </div>
+                          <div className="flex items-center justify-between rounded bg-red-50 dark:bg-red-900/20 px-2 py-1">
+                            <span className="text-red-700 dark:text-red-300">Failed</span>
+                            <span className="font-semibold">{failed} · {pct(failed)}%</span>
+                          </div>
+                          <div className="flex items-center justify-between rounded bg-muted px-2 py-1">
+                            <span className="text-muted-foreground">Pending</span>
+                            <span className="font-semibold">{pending} · {pct(pending)}%</span>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                <div className="rounded-lg border p-4 space-y-2 text-sm">
+                  <h4 className="text-sm font-semibold mb-1">Summary</h4>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Recipients</span>
+                    <span className="font-semibold">{detailStats.total}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total cost</span>
+                    <span className="font-semibold">
+                      KES {(detailCampaign?.total_cost || 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Status</span>
+                    <span>{detailCampaign ? getStatusBadge(detailCampaign.status) : null}</span>
+                  </div>
+                  {detailCampaign?.sent_at && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Sent at</span>
+                      <span>{new Date(detailCampaign.sent_at).toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Delivery rate</span>
+                    <span className="font-semibold">
+                      {detailStats.total
+                        ? `${Math.round((detailStats.delivered / detailStats.total) * 1000) / 10}%`
+                        : '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Failure rate</span>
+                    <span className="font-semibold">
+                      {detailStats.total
+                        ? `${Math.round((detailStats.failed / detailStats.total) * 1000) / 10}%`
+                        : '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recipients list */}
+              <div>
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                  <h4 className="text-sm font-semibold flex items-center gap-2">
+                    <Users className="h-4 w-4" /> Recipients ({filteredRecipients.length}
+                    {filteredRecipients.length !== detailRecipients.length
+                      ? ` of ${detailRecipients.length}`
+                      : ''}
+                    )
+                  </h4>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        placeholder="Search name or phone"
+                        value={detailSearch}
+                        onChange={(e) => setDetailSearch(e.target.value)}
+                        className="pl-8 h-8 w-56 text-xs"
+                      />
+                    </div>
+                    <select
+                      value={detailStatusFilter}
+                      onChange={(e) =>
+                        setDetailStatusFilter(e.target.value as typeof detailStatusFilter)
+                      }
+                      className="h-8 text-xs rounded-md border bg-background px-2"
+                    >
+                      <option value="all">All statuses</option>
+                      <option value="delivered">Delivered</option>
+                      <option value="sent">Sent</option>
+                      <option value="failed">Failed</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={exportRecipientsCsv}
+                      disabled={filteredRecipients.length === 0}
+                    >
+                      Export CSV
+                    </Button>
+                  </div>
+                </div>
+                <div className="rounded-lg border max-h-80 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-background border-b">
+                      <tr>
+                        <th className="text-left py-2 px-2 font-medium">Name</th>
+                        <th className="text-left py-2 px-2 font-medium">Phone</th>
+                        <th className="text-left py-2 px-2 font-medium">Status</th>
+                        <th className="text-left py-2 px-2 font-medium">Sent</th>
+                        <th className="text-left py-2 px-2 font-medium">Delivered</th>
+                        <th className="text-left py-2 px-2 font-medium">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRecipients.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="text-center py-6 text-muted-foreground">
+                            No recipients match the current filter.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredRecipients.map((r) => (
+                          <tr key={r.id} className="border-b last:border-b-0">
+                            <td className="py-1.5 px-2">{r.full_name || '—'}</td>
+                            <td className="py-1.5 px-2 font-mono">{r.phone}</td>
+                            <td className="py-1.5 px-2">
+                              {r.status === 'delivered' && (
+                                <Badge className="bg-green-100 text-green-800 text-[10px]">
+                                  Delivered
+                                </Badge>
+                              )}
+                              {r.status === 'sent' && (
+                                <Badge className="bg-blue-100 text-blue-800 text-[10px]">
+                                  Sent
+                                </Badge>
+                              )}
+                              {r.status === 'failed' && (
+                                <Badge className="bg-red-100 text-red-800 text-[10px]">
+                                  <XCircle className="h-3 w-3 mr-1" /> Failed
+                                </Badge>
+                              )}
+                              {r.status === 'pending' && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  Pending
+                                </Badge>
+                              )}
+                            </td>
+                            <td className="py-1.5 px-2 text-muted-foreground whitespace-nowrap">
+                              {r.sent_at ? new Date(r.sent_at).toLocaleString() : '—'}
+                            </td>
+                            <td className="py-1.5 px-2 text-muted-foreground whitespace-nowrap">
+                              {r.delivered_at ? new Date(r.delivered_at).toLocaleString() : '—'}
+                            </td>
+                            <td className="py-1.5 px-2 text-red-600 max-w-[180px] truncate">
+                              {r.failure_reason || ''}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -88,7 +88,7 @@ export default function PrivacyPolicyPage() {
               If you have questions about this Privacy Policy or wish to exercise your data protection rights, please contact us:
             </p>
             <ul>
-              <li>Email: support@myvote.ke</li>
+              <li>Email: support@keyvote.online</li>
               <li>WhatsApp: +254 733 638 940</li>
               <li>USSD: *384*VOTE#</li>
             </ul>

@@ -187,7 +187,7 @@ export default function ProfileScreen() {
         router.push('/notifications');
         break;
       case 'help':
-        Alert.alert('Help & Support', 'Contact support at support@myvote.ke');
+        Alert.alert('Help & Support', 'Contact support at support@keyvote.online');
         break;
       case 'terms':
         Alert.alert('Terms & Privacy', 'View our terms of service and privacy policy.');

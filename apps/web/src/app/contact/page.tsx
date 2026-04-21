@@ -21,8 +21,8 @@ export default function ContactPage() {
                   <Mail className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-semibold mb-1">Email</h3>
-                <a href="mailto:support@myvote.ke" className="text-sm text-muted-foreground hover:text-primary">
-                  support@myvote.ke
+                <a href="mailto:support@keyvote.online" className="text-sm text-muted-foreground hover:text-primary">
+                  support@keyvote.online
                 </a>
               </div>
 

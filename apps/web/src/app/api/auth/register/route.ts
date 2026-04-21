@@ -91,8 +91,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create email from phone (workaround for Supabase phone auth) or use real email
-    const email = normalizedEmail || `${normalizedPhone!.replace('+', '')}@myvote.ke`;
+    // Create email from phone (workaround for Supabase phone auth) or use real email.
+    // New phone-only accounts use the active domain (keyvote.online). Legacy accounts
+    // created before the rename still have @myvote.ke addresses and must keep working.
+    const email = normalizedEmail || `${normalizedPhone!.replace('+', '')}@keyvote.online`;
     const fullName = `${firstName} ${lastName}`;
 
     // Create auth user

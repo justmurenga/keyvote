@@ -49,9 +49,14 @@ export function normalizePhoneNumber(phone: string): string {
  * Send SMS via Airtouch API
  */
 export async function sendSMS(options: AirtouchSendOptions): Promise<AirtouchResponse> {
-  const recipients = Array.isArray(options.to)
-    ? options.to.map(n => normalizePhoneNumber(n).replace(/^\+/, ''))
-    : [normalizePhoneNumber(options.to).replace(/^\+/, '')];
+  // Keep both forms: the digits-only form Airtouch wants on the wire,
+  // and the canonical +E.164 form we use everywhere else (DB, callers).
+  const rawList = Array.isArray(options.to) ? options.to : [options.to];
+  const phoneMap = rawList.map((n) => {
+    const plus = normalizePhoneNumber(n); // e.g. +254704353392
+    return { plus, digits: plus.replace(/^\+/, '') };
+  });
+  const recipients = phoneMap.map((p) => p.digits);
 
   const senderId = options.senderId || DEFAULT_SENDER_ID;
 
@@ -63,9 +68,9 @@ export async function sendSMS(options: AirtouchSendOptions): Promise<AirtouchRes
   let hasSuccess = false;
 
   // Airtouch supports sending to multiple numbers — send in batches of 100
-  const batches: string[][] = [];
-  for (let i = 0; i < recipients.length; i += 100) {
-    batches.push(recipients.slice(i, i + 100));
+  const batches: { plus: string; digits: string }[][] = [];
+  for (let i = 0; i < phoneMap.length; i += 100) {
+    batches.push(phoneMap.slice(i, i + 100));
   }
 
   for (const batch of batches) {
@@ -74,7 +79,7 @@ export async function sendSMS(options: AirtouchSendOptions): Promise<AirtouchRes
         username: AIRTOUCH_USERNAME,
         password: getPassword(),
         issn: senderId,
-        msisdn: batch.join(','),
+        msisdn: batch.map((p) => p.digits).join(','),
         text: options.message,
       };
 
@@ -102,28 +107,36 @@ export async function sendSMS(options: AirtouchSendOptions): Promise<AirtouchRes
 
         // Airtouch returns status_code — "1000" means success
         if (parsed && parsed.status_code && parsed.status_code !== '1000') {
-          for (const phone of batch) {
-            results.push({ phone, status: 'failed', error: `${parsed.status_code}: ${parsed.status_desc || 'Unknown error'}` });
+          for (const p of batch) {
+            results.push({
+              phone: p.plus,
+              status: 'failed',
+              error: `${parsed.status_code}: ${parsed.status_desc || 'Unknown error'}`,
+            });
           }
         } else {
           // Airtouch often returns message_id: null even on success.
           // Generate a stable UUID-based ID so we can track delivery in our DB.
-          for (const phone of batch) {
+          for (const p of batch) {
             const messageId = parsed?.message_id || `at-${crypto.randomUUID()}`;
-            results.push({ phone, status: 'sent', messageId });
+            results.push({ phone: p.plus, status: 'sent', messageId });
             hasSuccess = true;
           }
         }
       } else {
-        for (const phone of batch) {
-          results.push({ phone, status: 'failed', error: `HTTP ${response.status}: ${text}` });
+        for (const p of batch) {
+          results.push({
+            phone: p.plus,
+            status: 'failed',
+            error: `HTTP ${response.status}: ${text}`,
+          });
         }
       }
     } catch (error) {
       console.error('[Airtouch] Error:', error);
-      for (const phone of batch) {
+      for (const p of batch) {
         results.push({
-          phone,
+          phone: p.plus,
           status: 'failed',
           error: error instanceof Error ? error.message : 'Network error',
         });
@@ -131,11 +144,94 @@ export async function sendSMS(options: AirtouchSendOptions): Promise<AirtouchRes
     }
   }
 
+  // Mark batches variable as intentionally used (recipients array kept for log parity)
+  void recipients;
+
   return {
     success: hasSuccess,
     messageId: `campaign-${crypto.randomUUID()}`,
     responses: results,
   };
+}
+
+/**
+ * Fetch remaining SMS balance from Airtouch.
+ * Docs: https://client.airtouch.co.ke:9012/users/balance-api/?username=<u>&password=<md5>
+ */
+export interface AirtouchBalance {
+  success: boolean;
+  balance?: number;
+  currency?: string;
+  raw?: unknown;
+  error?: string;
+}
+
+export async function getAirtouchBalance(): Promise<AirtouchBalance> {
+  if (!hasCredentials) {
+    return { success: false, error: 'Airtouch SMS not configured. Set SMS_AIRTOUCH_USERNAME and SMS_AIRTOUCH_API_KEY.' };
+  }
+  try {
+    const url = `https://client.airtouch.co.ke:9012/users/balance-api/?username=${encodeURIComponent(
+      AIRTOUCH_USERNAME,
+    )}&password=${encodeURIComponent(getPassword())}`;
+
+    const response = await fetch(url, { method: 'GET', cache: 'no-store' });
+    const text = await response.text();
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}: ${text}` };
+    }
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // Not JSON — try to parse a bare number
+      const n = parseFloat(text.trim());
+      if (!Number.isNaN(n)) {
+        return { success: true, balance: n, raw: text };
+      }
+      return { success: false, error: 'Unexpected response', raw: text };
+    }
+
+    // Airtouch may return things like { status_code: "1000", balance: "123.45", currency: "KES" }
+    // or { Balance: 123.45 } depending on account. Be defensive.
+    const candidate =
+      parsed?.balance ??
+      parsed?.Balance ??
+      parsed?.sms_balance ??
+      parsed?.data?.balance ??
+      parsed?.data?.Balance;
+
+    const balance =
+      typeof candidate === 'number'
+        ? candidate
+        : typeof candidate === 'string'
+          ? parseFloat(candidate)
+          : undefined;
+
+    if (parsed?.status_code && parsed.status_code !== '1000' && balance === undefined) {
+      return {
+        success: false,
+        error: `${parsed.status_code}: ${parsed.status_desc || 'Unknown error'}`,
+        raw: parsed,
+      };
+    }
+
+    return {
+      success: balance !== undefined && !Number.isNaN(balance),
+      balance: balance !== undefined && !Number.isNaN(balance) ? balance : undefined,
+      currency: parsed?.currency || parsed?.Currency || 'KES',
+      raw: parsed,
+      error:
+        balance === undefined || Number.isNaN(balance)
+          ? 'Balance field not found in response'
+          : undefined,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Network error',
+    };
+  }
 }
 
 /**

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getApiCurrentUser } from '@/lib/auth';
+import { requireNationalEntitlement } from '@/lib/entitlements/national';
 
 export async function POST(request: NextRequest) {
   try {
@@ -74,15 +75,37 @@ export async function POST(request: NextRequest) {
     // Check if poll exists and is active
     const { data: poll, error: pollError } = await supabase
       .from('polls')
-      .select('id, status, start_time, end_time, position')
+      .select('id, status, start_time, end_time, position, county_id, constituency_id, ward_id')
       .eq('id', pollId)
-      .single() as { data: { id: string; status: string; start_time: string; end_time: string; position: string } | null; error: any };
+      .single() as { data: { id: string; status: string; start_time: string; end_time: string; position: string; county_id: string | null; constituency_id: string | null; ward_id: string | null } | null; error: any };
 
     if (pollError || !poll) {
       return NextResponse.json(
         { error: 'Poll not found' },
         { status: 404 }
       );
+    }
+
+    // ---- National / presidential paywall ----
+    // Voting in a national-tier poll (presidential race or any poll without
+    // a regional scope) requires an active `national_polls_access`
+    // subscription. Admins / staff bypass.
+    const isNational =
+      poll.position === 'president' ||
+      (!poll.county_id && !poll.constituency_id && !poll.ward_id);
+    if (isNational) {
+      const adminClient = createAdminClient();
+      const { data: meRow } = await adminClient
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .single() as { data: { role: string } | null; error: any };
+      const gate = await requireNationalEntitlement(
+        userId,
+        meRow?.role,
+        'national_polls_access',
+      );
+      if (gate) return gate;
     }
 
     const now = new Date();

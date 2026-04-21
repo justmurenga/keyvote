@@ -33,7 +33,26 @@ interface BillableItem {
   price: number;
   category: string;
   is_active: boolean;
+  // NEW: which roles are allowed to purchase / consume this item
+  roles?: string[];
+  // NEW: number of units granted per purchase (null/undefined = unlimited until expiry)
+  quantity?: number | null;
+  // NEW: validity (days) and grace period (days) after expiry
+  validity_days?: number | null;
+  grace_period_days?: number | null;
+  // NEW: lifecycle flags + terms text
+  auto_renew?: boolean;
+  requires_approval?: boolean;
+  terms?: string;
 }
+
+const ROLE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'voter', label: 'Voter' },
+  { value: 'candidate', label: 'Candidate' },
+  { value: 'agent', label: 'Agent' },
+  { value: 'party_admin', label: 'Party Admin' },
+  { value: 'system_admin', label: 'System Admin' },
+];
 
 interface PositionFee {
   id: string;
@@ -95,6 +114,13 @@ export default function BillableItemsPage() {
     price: 0,
     category: 'services',
     is_active: true,
+    roles: ['voter', 'candidate', 'agent', 'party_admin', 'system_admin'],
+    quantity: 1,
+    validity_days: null,
+    grace_period_days: 0,
+    auto_renew: false,
+    requires_approval: false,
+    terms: '',
   });
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'billable' | 'vying' | 'nomination'>('billable');
@@ -261,7 +287,21 @@ export default function BillableItemsPage() {
     }
     const updated = [...items, newItem as BillableItem];
     saveItems(updated);
-    setNewItem({ id: '', name: '', description: '', price: 0, category: 'services', is_active: true });
+    setNewItem({
+      id: '',
+      name: '',
+      description: '',
+      price: 0,
+      category: 'services',
+      is_active: true,
+      roles: ['voter', 'candidate', 'agent', 'party_admin', 'system_admin'],
+      quantity: 1,
+      validity_days: null,
+      grace_period_days: 0,
+      auto_renew: false,
+      requires_approval: false,
+      terms: '',
+    });
     setShowAddForm(false);
   };
 
@@ -779,6 +819,113 @@ export default function BillableItemsPage() {
                   onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
                 />
               </div>
+
+              {/* Role-level access */}
+              <div className="md:col-span-2 lg:col-span-3">
+                <label className="text-sm font-medium mb-1 block">
+                  Available to roles
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {ROLE_OPTIONS.map((r) => {
+                    const checked = (newItem.roles || []).includes(r.value);
+                    return (
+                      <label
+                        key={r.value}
+                        className={`px-3 py-1 rounded-full border text-xs cursor-pointer select-none ${
+                          checked ? 'bg-primary/10 border-primary' : 'bg-background'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={checked}
+                          onChange={(e) => {
+                            const cur = new Set(newItem.roles || []);
+                            if (e.target.checked) cur.add(r.value);
+                            else cur.delete(r.value);
+                            setNewItem({ ...newItem, roles: Array.from(cur) });
+                          }}
+                        />
+                        {r.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-1 block">Units per purchase</label>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="1 (blank = unlimited)"
+                  value={newItem.quantity ?? ''}
+                  onChange={(e) =>
+                    setNewItem({
+                      ...newItem,
+                      quantity: e.target.value === '' ? null : Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Validity (days)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="e.g. 30 (blank = no expiry)"
+                  value={newItem.validity_days ?? ''}
+                  onChange={(e) =>
+                    setNewItem({
+                      ...newItem,
+                      validity_days: e.target.value === '' ? null : Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Grace period (days)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="0"
+                  value={newItem.grace_period_days ?? 0}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, grace_period_days: Number(e.target.value) })
+                  }
+                />
+              </div>
+
+              <div className="flex items-center gap-4 md:col-span-2 lg:col-span-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={!!newItem.auto_renew}
+                    onChange={(e) => setNewItem({ ...newItem, auto_renew: e.target.checked })}
+                  />
+                  Auto-renew on expiry
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={!!newItem.requires_approval}
+                    onChange={(e) =>
+                      setNewItem({ ...newItem, requires_approval: e.target.checked })
+                    }
+                  />
+                  Requires admin approval after purchase
+                </label>
+              </div>
+
+              <div className="md:col-span-2 lg:col-span-3">
+                <label className="text-sm font-medium mb-1 block">Terms &amp; conditions</label>
+                <textarea
+                  className="w-full px-3 py-2 border rounded-md bg-background text-sm min-h-[60px]"
+                  placeholder="Shown to the user before purchase. e.g. Non-refundable. Valid only for the active election cycle."
+                  value={newItem.terms || ''}
+                  onChange={(e) => setNewItem({ ...newItem, terms: e.target.value })}
+                />
+              </div>
             </div>
             <div className="flex gap-2 mt-4">
               <Button onClick={handleAddItem} disabled={saving}>
@@ -800,37 +947,144 @@ export default function BillableItemsPage() {
             <CardContent className="p-4">
               {editingId === item.id ? (
                 // Edit mode
-                <div className="grid gap-3 md:grid-cols-4 items-end">
-                  <div>
-                    <label className="text-xs font-medium mb-1 block">Name</label>
-                    <Input
-                      value={editForm.name || ''}
-                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    />
+                <div className="space-y-3">
+                  <div className="grid gap-3 md:grid-cols-4 items-end">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Name</label>
+                      <Input
+                        value={editForm.name || ''}
+                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Price (KES)</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={editForm.price ?? ''}
+                        onChange={(e) => setEditForm({ ...editForm, price: Number(e.target.value) })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Description</label>
+                      <Input
+                        value={editForm.description || ''}
+                        onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={handleSaveEdit} disabled={saving}>
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleCancelEdit}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-medium mb-1 block">Price (KES)</label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={editForm.price ?? ''}
-                      onChange={(e) => setEditForm({ ...editForm, price: Number(e.target.value) })}
-                    />
+
+                  <div className="grid gap-3 md:grid-cols-4 items-end">
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Units / purchase</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={editForm.quantity ?? ''}
+                        placeholder="blank = unlimited"
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            quantity: e.target.value === '' ? null : Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Validity (days)</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={editForm.validity_days ?? ''}
+                        placeholder="blank = no expiry"
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            validity_days: e.target.value === '' ? null : Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium mb-1 block">Grace (days)</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={editForm.grace_period_days ?? 0}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, grace_period_days: Number(e.target.value) })
+                        }
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1 text-xs">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={!!editForm.auto_renew}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, auto_renew: e.target.checked })
+                          }
+                        />
+                        Auto-renew
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={!!editForm.requires_approval}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, requires_approval: e.target.checked })
+                          }
+                        />
+                        Requires approval
+                      </label>
+                    </div>
                   </div>
+
                   <div>
-                    <label className="text-xs font-medium mb-1 block">Description</label>
-                    <Input
-                      value={editForm.description || ''}
-                      onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                    />
+                    <label className="text-xs font-medium mb-1 block">Available to roles</label>
+                    <div className="flex flex-wrap gap-2">
+                      {ROLE_OPTIONS.map((r) => {
+                        const checked = (editForm.roles || []).includes(r.value);
+                        return (
+                          <label
+                            key={r.value}
+                            className={`px-2.5 py-1 rounded-full border text-xs cursor-pointer select-none ${
+                              checked ? 'bg-primary/10 border-primary' : 'bg-background'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="hidden"
+                              checked={checked}
+                              onChange={(e) => {
+                                const cur = new Set(editForm.roles || []);
+                                if (e.target.checked) cur.add(r.value);
+                                else cur.delete(r.value);
+                                setEditForm({ ...editForm, roles: Array.from(cur) });
+                              }}
+                            />
+                            {r.label}
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={handleSaveEdit} disabled={saving}>
-                      <Check className="h-4 w-4" />
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={handleCancelEdit}>
-                      <X className="h-4 w-4" />
-                    </Button>
+
+                  <div>
+                    <label className="text-xs font-medium mb-1 block">Terms &amp; conditions</label>
+                    <textarea
+                      className="w-full px-3 py-2 border rounded-md bg-background text-sm min-h-[60px]"
+                      value={editForm.terms || ''}
+                      onChange={(e) => setEditForm({ ...editForm, terms: e.target.value })}
+                    />
                   </div>
                 </div>
               ) : (
@@ -849,6 +1103,39 @@ export default function BillableItemsPage() {
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground">{item.description}</p>
+                      <div className="flex flex-wrap items-center gap-1 mt-1">
+                        {(item.roles && item.roles.length > 0
+                          ? item.roles
+                          : ROLE_OPTIONS.map((r) => r.value)
+                        ).map((r) => (
+                          <Badge key={r} variant="outline" className="text-[10px] px-1.5 py-0 capitalize">
+                            {r.replace('_', ' ')}
+                          </Badge>
+                        ))}
+                        {item.quantity != null && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            {item.quantity} unit{item.quantity === 1 ? '' : 's'}/buy
+                          </Badge>
+                        )}
+                        {item.validity_days != null && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            {item.validity_days}d valid
+                            {item.grace_period_days
+                              ? ` +${item.grace_period_days}d grace`
+                              : ''}
+                          </Badge>
+                        )}
+                        {item.auto_renew && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            auto-renew
+                          </Badge>
+                        )}
+                        {item.requires_approval && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            needs approval
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">

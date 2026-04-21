@@ -18,6 +18,8 @@ import {
   TrendingUp,
   TrendingDown,
   AlertTriangle,
+  Plus,
+  Package,
 } from 'lucide-react';
 import { PermissionGuard } from '@/components/auth/permission-guard';
 
@@ -74,6 +76,30 @@ export default function AdminWalletsPage() {
     frozenCount: number;
   } | null>(null);
 
+  // Manual credit (Add Funds) state
+  const [creditOpen, setCreditOpen] = useState(false);
+  const [creditAmount, setCreditAmount] = useState('');
+  const [creditDescription, setCreditDescription] = useState('');
+  const [creditReference, setCreditReference] = useState('');
+  const [creditError, setCreditError] = useState('');
+  const [creditSuccess, setCreditSuccess] = useState('');
+
+  // Entitlements (services the wallet owner has prepaid for)
+  interface Entitlement {
+    id: string;
+    item_id: string;
+    item_name: string;
+    category: string | null;
+    quantity_remaining: number | null;
+    quantity_total: number | null;
+    amount_paid: number;
+    status: string;
+    expires_at: string | null;
+    granted_at: string;
+  }
+  const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
+  const [entLoading, setEntLoading] = useState(false);
+
   const fetchWallets = useCallback(async () => {
     setLoading(true);
     try {
@@ -115,7 +141,78 @@ export default function AdminWalletsPage() {
 
   const openWalletDetail = async (wallet: WalletData) => {
     setSelectedWallet(wallet);
-    await fetchTransactions(wallet.id);
+    setCreditOpen(false);
+    setCreditAmount('');
+    setCreditDescription('');
+    setCreditReference('');
+    setCreditError('');
+    setCreditSuccess('');
+    setEntitlements([]);
+    await Promise.all([fetchTransactions(wallet.id), fetchEntitlements(wallet.id)]);
+  };
+
+  const fetchEntitlements = async (walletId: string) => {
+    setEntLoading(true);
+    try {
+      const res = await fetch(`/api/admin/wallets/${walletId}/entitlements`);
+      if (res.ok) {
+        const data = await res.json();
+        setEntitlements(data.entitlements || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch entitlements:', error);
+    } finally {
+      setEntLoading(false);
+    }
+  };
+
+  const handleAddFunds = async () => {
+    if (!selectedWallet) return;
+    const amt = parseFloat(creditAmount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      setCreditError('Enter a valid amount greater than zero');
+      return;
+    }
+    setCreditError('');
+    setActionLoading(selectedWallet.id);
+    try {
+      const res = await fetch(`/api/admin/wallets/${selectedWallet.id}/credit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: amt,
+          description: creditDescription || undefined,
+          reference: creditReference || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCreditError(data.error || 'Failed to credit wallet');
+        return;
+      }
+      setCreditSuccess(`Credited KES ${amt.toLocaleString()} successfully`);
+      setCreditAmount('');
+      setCreditDescription('');
+      setCreditReference('');
+      // refresh wallet + transactions
+      await fetchWallets();
+      await fetchTransactions(selectedWallet.id);
+      // optimistic local update
+      setSelectedWallet((prev) =>
+        prev
+          ? {
+              ...prev,
+              balance: (prev.balance || 0) + amt,
+              total_credited: (prev.total_credited || 0) + amt,
+            }
+          : prev,
+      );
+      setTimeout(() => setCreditSuccess(''), 4000);
+    } catch (e) {
+      setCreditError(e instanceof Error ? e.message : 'Failed to credit wallet');
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const handleFreeze = async (walletId: string, freeze: boolean) => {
@@ -238,7 +335,14 @@ export default function AdminWalletsPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2 pt-2 border-t">
+                <div className="flex flex-wrap gap-2 pt-2 border-t">
+                  <Button
+                    size="sm"
+                    onClick={() => setCreditOpen((v) => !v)}
+                    disabled={selectedWallet.is_frozen}
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Add Funds
+                  </Button>
                   {selectedWallet.is_frozen ? (
                     <Button size="sm" onClick={() => handleFreeze(selectedWallet.id, false)} disabled={actionLoading === selectedWallet.id}>
                       <Unlock className="h-4 w-4 mr-1" /> Unfreeze
@@ -247,6 +351,114 @@ export default function AdminWalletsPage() {
                     <Button size="sm" variant="destructive" onClick={() => handleFreeze(selectedWallet.id, true)} disabled={actionLoading === selectedWallet.id}>
                       <Lock className="h-4 w-4 mr-1" /> Freeze
                     </Button>
+                  )}
+                </div>
+
+                {/* Add Funds form */}
+                {creditOpen && !selectedWallet.is_frozen && (
+                  <div className="border rounded-lg p-3 bg-muted/30 space-y-3">
+                    <p className="text-sm font-semibold flex items-center gap-2">
+                      <Plus className="h-4 w-4" /> Manual Top-up
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-xs text-muted-foreground">Amount (KES)</label>
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={creditAmount}
+                          onChange={(e) => setCreditAmount(e.target.value)}
+                          placeholder="e.g. 500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Reference (optional)</label>
+                        <Input
+                          value={creditReference}
+                          onChange={(e) => setCreditReference(e.target.value)}
+                          placeholder="e.g. VOUCHER-123"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Description</label>
+                        <Input
+                          value={creditDescription}
+                          onChange={(e) => setCreditDescription(e.target.value)}
+                          placeholder="Manual top-up by administrator"
+                        />
+                      </div>
+                    </div>
+                    {creditError && (
+                      <p className="text-xs text-red-600">{creditError}</p>
+                    )}
+                    {creditSuccess && (
+                      <p className="text-xs text-green-700">{creditSuccess}</p>
+                    )}
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={handleAddFunds}
+                        disabled={actionLoading === selectedWallet.id || !creditAmount}
+                      >
+                        Credit Wallet
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setCreditOpen(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      The amount will be added to the wallet immediately and recorded as an audited
+                      transaction. The user can then spend it on billable services (SMS, polls, profile
+                      boosts, subscriptions, etc.).
+                    </p>
+                  </div>
+                )}
+
+                {/* Prepaid services / entitlements */}
+                <div>
+                  <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Package className="h-4 w-4" /> Prepaid Services
+                  </h3>
+                  {entLoading ? (
+                    <div className="space-y-2">{[...Array(2)].map((_, i) => <div key={i} className="h-10 bg-muted rounded animate-pulse" />)}</div>
+                  ) : entitlements.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No prepaid services yet. Items the user buys from their wallet will appear here.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-56 overflow-y-auto">
+                      {entitlements.map((e) => (
+                        <div key={e.id} className="flex items-center justify-between p-2 rounded-lg border text-sm">
+                          <div>
+                            <p className="font-medium">{e.item_name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {e.category || 'service'} ·{' '}
+                              {e.quantity_remaining != null
+                                ? `${e.quantity_remaining}/${e.quantity_total ?? '∞'} left`
+                                : e.expires_at
+                                  ? `expires ${new Date(e.expires_at).toLocaleDateString()}`
+                                  : 'unlimited'}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <Badge
+                              className={
+                                e.status === 'active'
+                                  ? 'bg-green-100 text-green-800 text-xs'
+                                  : 'bg-muted text-xs'
+                              }
+                              variant={e.status === 'active' ? undefined : 'secondary'}
+                            >
+                              {e.status}
+                            </Badge>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              KES {Number(e.amount_paid || 0).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
 

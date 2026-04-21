@@ -33,9 +33,9 @@ export async function POST(request: NextRequest) {
     // Check if user exists
     const { data: existingUser, error: userError } = await adminClient
       .from('users')
-      .select('id, phone, full_name, role')
+      .select('id, phone, full_name, role, email')
       .eq('phone', normalizedPhone)
-      .single() as { data: { id: string; phone: string; full_name: string; role: string } | null; error: any };
+      .single() as { data: { id: string; phone: string; full_name: string; role: string; email: string | null } | null; error: any };
 
     if (!existingUser) {
       return NextResponse.json(
@@ -47,8 +47,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create email from phone
-    const email = `${normalizedPhone.replace('+', '')}@myvote.ke`;
+    // Use the user's stored email so legacy @myvote.ke accounts keep working
+    // alongside new @keyvote.online synthetic emails.
+    const email =
+      existingUser.email || `${normalizedPhone.replace('+', '')}@keyvote.online`;
 
     // Generate a magic link for passwordless sign-in
     const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({

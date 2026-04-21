@@ -68,7 +68,7 @@ export function SiteFooter() {
           <div>
             <h4 className="mb-4 font-semibold">Contact</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>Email: {settings.supportEmail || 'support@myvote.ke'}</li>
+              <li>Email: {settings.supportEmail || 'support@keyvote.online'}</li>
               <li>USSD: {settings.ussdCode || '*384*VOTE#'}</li>
               <li>
                 <a

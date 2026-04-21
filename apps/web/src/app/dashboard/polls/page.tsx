@@ -19,6 +19,11 @@ export default function DashboardPollsPage() {
     setIsLoading(true);
     setError(null);
     try {
+      // Opportunistically auto-close any polls whose end_time has passed
+      // and dispatch in-app notifications to voters. Fire-and-forget — we
+      // don't want this background housekeeping to block the page.
+      fetch('/api/polls/process-ended', { method: 'POST' }).catch(() => {});
+
       const params = new URLSearchParams();
       if (filter !== 'all') params.set('position', filter);
       if (statusFilter !== 'all') params.set('status', statusFilter);

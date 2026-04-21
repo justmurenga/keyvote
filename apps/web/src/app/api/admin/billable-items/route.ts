@@ -15,6 +15,10 @@ const DEFAULT_BILLABLE_ITEMS = [
   { id: 'bulk_sms_10', name: 'Bulk SMS (10 pack)', description: 'Send 10 SMS messages at a discounted rate', price: 40, category: 'messaging', is_active: true },
   { id: 'bulk_sms_50', name: 'Bulk SMS (50 pack)', description: 'Send 50 SMS messages at a discounted rate', price: 175, category: 'messaging', is_active: true },
   { id: 'bulk_sms_100', name: 'Bulk SMS (100 pack)', description: 'Send 100 SMS messages at a discounted rate', price: 300, category: 'messaging', is_active: true },
+  // ---- National / presidential tier (30-day subscriptions) ----
+  { id: 'national_candidates_access', name: 'National Candidates Access (30 days)', description: 'Browse and follow presidential / national-level candidates for 30 days.', price: 100, category: 'subscription', is_active: true },
+  { id: 'national_polls_access', name: 'National Polls Access (30 days)', description: 'View and vote in opinion polls scoped to the presidential / national race for 30 days.', price: 100, category: 'subscription', is_active: true },
+  { id: 'national_results_access', name: 'National Results Access (30 days)', description: 'View presidential and other national-level election results and analytics for 30 days.', price: 100, category: 'subscription', is_active: true },
 ];
 
 /**
@@ -92,11 +96,53 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Items must be an array' }, { status: 400 });
     }
 
-    // Validate items
-    for (const item of items) {
-      if (!item.id || !item.name || typeof item.price !== 'number' || item.price < 0) {
-        return NextResponse.json({ error: `Invalid item: ${item.id || 'unknown'}` }, { status: 400 });
+    const ALLOWED_ROLES = [
+      'voter',
+      'candidate',
+      'agent',
+      'party_admin',
+      'system_admin',
+    ];
+
+    // Validate + normalize items
+    const normalized = [] as any[];
+    for (const raw of items) {
+      if (!raw.id || !raw.name || typeof raw.price !== 'number' || raw.price < 0) {
+        return NextResponse.json(
+          { error: `Invalid item: ${raw.id || 'unknown'}` },
+          { status: 400 },
+        );
       }
+
+      // Allowed roles — default to all roles if not provided
+      let roles: string[] = Array.isArray(raw.roles) ? raw.roles : ALLOWED_ROLES;
+      roles = roles.filter((r: any) => ALLOWED_ROLES.includes(r));
+      if (roles.length === 0) roles = ALLOWED_ROLES;
+
+      const intOr = (v: any, fallback: number | null) => {
+        const n = typeof v === 'number' ? v : parseInt(String(v ?? ''));
+        return Number.isFinite(n) && n >= 0 ? n : fallback;
+      };
+
+      normalized.push({
+        id: String(raw.id),
+        name: String(raw.name),
+        description: raw.description || '',
+        price: Number(raw.price),
+        category: raw.category || 'services',
+        is_active: raw.is_active !== false,
+        // NEW — access control
+        roles,
+        // NEW — prepaid pool sizing
+        quantity: intOr(raw.quantity, null), // null = unlimited / time-bound
+        // NEW — lifecycle
+        validity_days: intOr(raw.validity_days ?? raw.duration_days, null),
+        grace_period_days: intOr(raw.grace_period_days, 0) ?? 0,
+        auto_renew: !!raw.auto_renew,
+        requires_approval: !!raw.requires_approval,
+        // NEW — terms text shown to user before purchase
+        terms: raw.terms ? String(raw.terms) : '',
+      });
     }
 
     // Upsert into system_settings
@@ -104,7 +150,7 @@ export async function PUT(request: NextRequest) {
       .from('system_settings')
       .upsert({
         key: 'billable_items',
-        value: items,
+        value: normalized,
         updated_at: new Date().toISOString(),
         updated_by: userId,
       }, { onConflict: 'key' });
@@ -116,7 +162,7 @@ export async function PUT(request: NextRequest) {
 
     // Also update the wallet charge pricing to stay in sync
     const pricingMap: Record<string, number> = {};
-    for (const item of items) {
+    for (const item of normalized) {
       pricingMap[item.id] = item.price;
     }
 
@@ -129,7 +175,7 @@ export async function PUT(request: NextRequest) {
         updated_by: userId,
       }, { onConflict: 'key' });
 
-    return NextResponse.json({ success: true, items });
+    return NextResponse.json({ success: true, items: normalized });
   } catch (error) {
     console.error('[BillableItems PUT] Error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

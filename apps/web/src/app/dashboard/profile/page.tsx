@@ -189,7 +189,7 @@ export default function ProfilePage() {
       // Pre-fill form
       setFormData({
         full_name: data.profile.full_name || '',
-        email: data.profile.email?.endsWith('@myvote.ke')
+        email: (data.profile.email?.endsWith('@myvote.ke') || data.profile.email?.endsWith('@keyvote.online'))
           ? ''
           : data.profile.email || '',
         gender: data.profile.gender || '',
@@ -614,7 +614,7 @@ export default function ProfilePage() {
     .toUpperCase()
     .slice(0, 2);
 
-  const isAutoEmail = profile.email?.endsWith('@myvote.ke');
+  const isAutoEmail = profile.email?.endsWith('@myvote.ke') || profile.email?.endsWith('@keyvote.online');
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -1543,7 +1543,7 @@ export default function ProfilePage() {
               if (profile) {
                 setFormData({
                   full_name: profile.full_name || '',
-                  email: profile.email?.endsWith('@myvote.ke')
+                  email: (profile.email?.endsWith('@myvote.ke') || profile.email?.endsWith('@keyvote.online'))
                     ? ''
                     : profile.email || '',
                   gender: profile.gender || '',

@@ -38,7 +38,7 @@ export default function AdminSettingsPage() {
     siteName: 'myVote Kenya',
     supportPhone: '+254 700 000 000',
     ussdCode: '*123#',
-    supportEmail: 'support@myvote.co.ke',
+    supportEmail: 'support@keyvote.online',
     maintenanceMode: false,
     registrationOpen: true,
     maxPollsPerUser: '5',

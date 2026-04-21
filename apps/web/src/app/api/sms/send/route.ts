@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getUser } from '@/lib/auth/get-user';
-import { sendSMS, calculateSMSCost, getSMSSegments } from '@/lib/sms/airtouch';
+import { sendSMS, calculateSMSCost, getSMSSegments, normalizePhoneNumber } from '@/lib/sms/airtouch';
+import { getOrCreateWallet, debitWallet } from '@/lib/wallet';
 import {
   fetchRecipients,
   applyMergeFields,
@@ -99,16 +100,26 @@ export async function POST(request: NextRequest) {
     }
     const totalCost = calculateSMSCost(totalSegments, costPerSMS);
 
-    const { data: wallet } = await supabase
-      .from('wallets')
-      .select('id, balance')
-      .eq('user_id', user.id)
-      .single();
+    // Use the unified wallet so this candidate's bulk-SMS spend is
+    // debited from the same wallet as every other billable item in
+    // myVote (top-ups, invites, results access, agent payments, ...).
+    const wallet = (await getOrCreateWallet(user.id)) as {
+      id: string;
+      balance: number;
+      is_frozen: boolean;
+    };
 
-    if (!wallet || (wallet.balance ?? 0) < totalCost) {
+    if (wallet.is_frozen) {
+      return NextResponse.json(
+        { error: 'Your wallet is frozen. Please contact support.' },
+        { status: 403 },
+      );
+    }
+
+    if ((wallet.balance ?? 0) < totalCost) {
       return NextResponse.json({
         error: `Insufficient wallet balance. Need KES ${totalCost.toFixed(2)}, have KES ${(wallet?.balance || 0).toFixed(2)}`,
-      }, { status: 400 });
+      }, { status: 402 });
     }
 
     const { data: campaign, error: campaignErr } = await (supabase
@@ -136,22 +147,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create campaign' }, { status: 500 });
     }
 
-    await (supabase.from('wallets') as any)
-      .update({ balance: (wallet.balance ?? 0) - totalCost })
-      .eq('id', wallet.id);
-
-    await (supabase.from('wallet_transactions') as any).insert({
-      wallet_id: wallet.id,
-      type: 'debit',
-      amount: totalCost,
-      description: `Bulk SMS campaign (${eligible.length} recipients)`,
-      reference: campaign.id,
-      status: 'completed',
-    });
+    try {
+      await debitWallet({
+        walletId: wallet.id,
+        type: 'sms_charge',
+        amount: totalCost,
+        description: `Bulk SMS campaign (${eligible.length} recipients)`,
+        reference: campaign.id,
+        metadata: {
+          source: 'sms_campaign',
+          campaign_id: campaign.id,
+          candidate_id: candidateScope.id,
+          recipients: eligible.length,
+          segments: totalSegments,
+          cost_per_sms: costPerSMS,
+        },
+      });
+    } catch (chargeErr: any) {
+      // Roll the campaign back so it isn't left in a 'sending' state
+      // with no debit recorded against it.
+      await (supabase.from('sms_campaigns') as any)
+        .update({ status: 'failed', failure_reason: chargeErr?.message || 'Wallet debit failed' })
+        .eq('id', campaign.id);
+      return NextResponse.json(
+        { error: chargeErr?.message || 'Failed to charge wallet for SMS campaign' },
+        { status: 402 },
+      );
+    }
 
     const recipientRows = eligible.map((r) => ({
       campaign_id: campaign.id,
-      phone: r.phone,
+      user_id: r.user_id || null,
+      phone: normalizePhoneNumber(r.phone!),
       status: 'pending',
     }));
     await (supabase.from('sms_recipients') as any).insert(recipientRows);
@@ -183,6 +210,10 @@ export async function POST(request: NextRequest) {
 
         if (result.responses) {
           for (const r of result.responses) {
+            // Match on both the normalized (+E.164) form and the digits-only
+            // form — be defensive against historic rows inserted either way.
+            const plus = normalizePhoneNumber(r.phone);
+            const digits = plus.replace(/^\+/, '');
             await (supabase
               .from('sms_recipients') as any)
               .update({
@@ -192,7 +223,7 @@ export async function POST(request: NextRequest) {
                 at_message_id: r.messageId || null,
               })
               .eq('campaign_id', campaign.id)
-              .eq('phone', r.phone);
+              .in('phone', [plus, digits, r.phone]);
           }
         }
       }

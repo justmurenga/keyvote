@@ -239,6 +239,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // If poll is created with 'active' or 'scheduled' status, send notifications to region users
+    if (requestedStatus === 'active' || requestedStatus === 'scheduled') {
+      try {
+        const adminDb = createAdminClient();
+        await adminDb.rpc('send_poll_initiation_notifications', {
+          p_poll_id: (poll as any).id,
+          p_notification_type: 'poll_initiated',
+        });
+        console.log(`Notifications sent for newly created poll ${(poll as any).id} with status ${requestedStatus}`);
+      } catch (notifError) {
+        console.error('Error sending poll notifications:', notifError);
+        // Don't fail the request if notifications fail - the poll was created successfully
+      }
+    }
+
     return NextResponse.json({ poll, message: 'Poll created successfully' });
   } catch (error) {
     console.error('Create poll API error:', error);

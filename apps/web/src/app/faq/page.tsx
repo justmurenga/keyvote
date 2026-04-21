@@ -146,7 +146,7 @@ export default function FAQPage() {
                   Chat on WhatsApp
                 </a>
                 <a
-                  href="mailto:support@myvote.ke"
+                  href="mailto:support@keyvote.online"
                   className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
                 >
                   Email Support

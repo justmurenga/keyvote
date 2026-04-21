@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getApiCurrentUser } from '@/lib/auth/get-user';
 import type { ElectoralPosition } from '@myvote/database';
 
@@ -197,6 +198,21 @@ export async function PATCH(
     if (error) {
       console.error('Poll update error:', error);
       return NextResponse.json({ error: 'Failed to update poll' }, { status: 500 });
+    }
+
+    // If poll status changed to 'active' or 'scheduled', send notifications to region users
+    if ((status === 'active' || status === 'scheduled') && status !== existingPoll.status) {
+      try {
+        const adminDb = createAdminClient();
+        await adminDb.rpc('send_poll_initiation_notifications', {
+          p_poll_id: id,
+          p_notification_type: 'poll_initiated',
+        });
+        console.log(`Notifications sent for poll ${id} status change to ${status}`);
+      } catch (notifError) {
+        console.error('Error sending poll notifications:', notifError);
+        // Don't fail the request if notifications fail - the poll was updated successfully
+      }
     }
 
     return NextResponse.json({ poll, message: 'Poll updated successfully' });

@@ -12,6 +12,8 @@ import {
   Plus,
   Search,
   Trash2,
+  Pencil,
+  Power,
   CheckCircle2,
   AlertCircle,
   Loader2,
@@ -26,7 +28,26 @@ import {
   Building2,
   Info,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { PermissionGuard } from '@/components/auth/permission-guard';
+import { useToast } from '@/components/ui/use-toast';
 import { getElectoralPositionLabel } from '@/lib/utils';
 
 interface SenderIdRecord {
@@ -80,6 +101,7 @@ function getRegionLabel(c: CandidateSearchResult | null | undefined) {
 }
 
 export default function AdminSMSPage() {
+  const { toast } = useToast();
   const [senderIds, setSenderIds] = useState<SenderIdRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -98,11 +120,56 @@ export default function AdminSMSPage() {
   const [notes, setNotes] = useState('');
   const [deactivatePrevious, setDeactivatePrevious] = useState(true);
 
+  // Edit dialog state
+  const [editing, setEditing] = useState<SenderIdRecord | null>(null);
+  const [editSenderId, setEditSenderId] = useState('');
+  const [editCost, setEditCost] = useState('1.00');
+  const [editNotes, setEditNotes] = useState('');
+  const [editIsActive, setEditIsActive] = useState(true);
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Delete / deactivate confirm
+  const [pendingDelete, setPendingDelete] = useState<SenderIdRecord | null>(null);
+  const [deleteMode, setDeleteMode] = useState<'deactivate' | 'hard'>('deactivate');
+  const [deleting, setDeleting] = useState(false);
+
+  // Airtouch provider balance (admin-only)
+  const [providerBalance, setProviderBalance] = useState<{
+    balance: number | null;
+    currency: string;
+    fetchedAt: string | null;
+    error: string | null;
+  }>({ balance: null, currency: 'KES', fetchedAt: null, error: null });
+  const [balanceLoading, setBalanceLoading] = useState(false);
+
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchProviderBalance = useCallback(async () => {
+    setBalanceLoading(true);
+    try {
+      const res = await fetch('/api/admin/sms/balance', { cache: 'no-store' });
+      const data = await res.json();
+      setProviderBalance({
+        balance: typeof data.balance === 'number' ? data.balance : null,
+        currency: data.currency || 'KES',
+        fetchedAt: data.fetchedAt || new Date().toISOString(),
+        error: data.success ? null : data.error || 'Failed to fetch balance',
+      });
+    } catch (e) {
+      setProviderBalance((prev) => ({
+        ...prev,
+        error: e instanceof Error ? e.message : 'Network error',
+        fetchedAt: new Date().toISOString(),
+      }));
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchSenderIds();
-  }, []);
+    fetchProviderBalance();
+  }, [fetchProviderBalance]);
 
   const fetchSenderIds = async () => {
     try {
@@ -147,10 +214,9 @@ export default function AdminSMSPage() {
     setCandidates([]);
     setLoadingDetails(true);
 
-    // Suggest a default sender ID derived from candidate name
+    // Suggest a default sender ID derived from candidate name (preserve case-friendly default)
     const suggestion = (c.user?.full_name || '')
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '')
+      .replace(/[^A-Za-z0-9]/g, '')
       .slice(0, 11);
     if (!newSenderId && suggestion.length >= 3) setNewSenderId(suggestion);
 
@@ -201,9 +267,10 @@ export default function AdminSMSPage() {
     if (!selectedCandidate || !newSenderId.trim()) return;
 
     if (!SENDER_ID_RE.test(newSenderId.trim())) {
-      setError(
-        'Sender ID must be 3–11 characters, start with a letter, and contain only letters and digits (no spaces or symbols).',
-      );
+      const msg =
+        'Sender ID must be 3–11 characters, start with a letter, and contain only letters and digits (no spaces or symbols).';
+      setError(msg);
+      toast({ title: 'Invalid sender ID', description: msg, variant: 'destructive' });
       return;
     }
 
@@ -215,7 +282,7 @@ export default function AdminSMSPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           candidateId: selectedCandidate.id,
-          senderId: newSenderId.trim().toUpperCase(),
+          senderId: newSenderId.trim(),
           costPerSms: parseFloat(costPerSms) || 1.0,
           notes: notes || null,
           deactivatePrevious,
@@ -225,11 +292,11 @@ export default function AdminSMSPage() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Failed to create sender ID');
       }
-      setSuccess(
-        `Sender ID "${newSenderId.trim().toUpperCase()}" assigned to ${
-          selectedCandidate.user?.full_name || 'candidate'
-        }`,
-      );
+      const successMsg = `Sender ID "${newSenderId.trim()}" assigned to ${
+        selectedCandidate.user?.full_name || 'candidate'
+      }`;
+      setSuccess(successMsg);
+      toast({ title: 'Sender ID assigned', description: successMsg });
       setShowForm(false);
       clearSelection();
       setCostPerSms('1.00');
@@ -237,25 +304,118 @@ export default function AdminSMSPage() {
       fetchSenderIds();
       setTimeout(() => setSuccess(''), 4000);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create sender ID');
+      const msg = e instanceof Error ? e.message : 'Failed to create sender ID';
+      setError(msg);
+      toast({ title: 'Failed to assign sender ID', description: msg, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Deactivate this sender ID?')) return;
+  const openEdit = (s: SenderIdRecord) => {
+    setEditing(s);
+    setEditSenderId(s.sender_id);
+    setEditCost((s.cost_per_sms ?? 1).toFixed(2));
+    setEditNotes(s.notes || '');
+    setEditIsActive(Boolean(s.is_active && s.is_approved));
+  };
+
+  const closeEdit = () => {
+    setEditing(null);
+    setEditSaving(false);
+  };
+
+  const handleEditSave = async () => {
+    if (!editing) return;
+
+    const trimmed = editSenderId.trim();
+    if (!SENDER_ID_RE.test(trimmed)) {
+      toast({
+        title: 'Invalid sender ID',
+        description:
+          'Sender ID must be 3–11 characters, start with a letter, and contain only letters and digits.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const cost = parseFloat(editCost);
+    if (!Number.isFinite(cost) || cost < 0.5 || cost > 100) {
+      toast({
+        title: 'Invalid cost',
+        description: 'Cost per SMS must be between 0.50 and 100.00 KES',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setEditSaving(true);
     try {
-      await fetch(`/api/sms/sender-ids?id=${id}`, { method: 'DELETE' });
+      const res = await fetch('/api/sms/sender-ids', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editing.id,
+          senderId: trimmed,
+          costPerSms: cost,
+          notes: editNotes,
+          isActive: editIsActive,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to update sender ID');
+      }
+      toast({
+        title: 'Sender ID updated',
+        description: `Changes saved for ${editing.candidates?.users?.full_name || 'candidate'}.`,
+      });
+      closeEdit();
       fetchSenderIds();
-      setSuccess('Sender ID deactivated');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch {}
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to update sender ID';
+      toast({ title: 'Update failed', description: msg, variant: 'destructive' });
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const openDelete = (s: SenderIdRecord, mode: 'deactivate' | 'hard' = 'deactivate') => {
+    setPendingDelete(s);
+    setDeleteMode(mode);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      const url =
+        `/api/sms/sender-ids?id=${encodeURIComponent(pendingDelete.id)}` +
+        (deleteMode === 'hard' ? '&hard=true' : '');
+      const res = await fetch(url, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to remove sender ID');
+      }
+      toast({
+        title: deleteMode === 'hard' ? 'Sender ID deleted' : 'Sender ID deactivated',
+        description:
+          deleteMode === 'hard'
+            ? `"${pendingDelete.sender_id}" permanently removed.`
+            : `"${pendingDelete.sender_id}" is no longer active.`,
+      });
+      setPendingDelete(null);
+      fetchSenderIds();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to remove sender ID';
+      toast({ title: 'Action failed', description: msg, variant: 'destructive' });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const senderIdValid = SENDER_ID_RE.test(newSenderId.trim());
   const conflictingActive = selectedCandidate?.existingSenderIds?.find(
-    (s) => s.is_active && s.sender_id.toUpperCase() === newSenderId.trim().toUpperCase(),
+    (s) => s.is_active && s.sender_id.toLowerCase() === newSenderId.trim().toLowerCase(),
   );
 
   return (
@@ -292,6 +452,65 @@ export default function AdminSMSPage() {
             <AlertCircle className="h-4 w-4" /> {error}
           </div>
         )}
+
+        {/* Airtouch Provider Balance (admin-only) */}
+        <Card className="border-emerald-200 dark:border-emerald-900/50 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-900/20 dark:to-background">
+          <CardContent className="py-5">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                  <WalletIcon className="h-6 w-6 text-emerald-700 dark:text-emerald-300" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                    Airtouch SMS Balance
+                    <ShieldCheck className="h-3 w-3" />
+                    <span className="text-[10px]">Admin only</span>
+                  </p>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    {balanceLoading && providerBalance.balance === null ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-emerald-700" />
+                    ) : providerBalance.error ? (
+                      <span className="text-base font-semibold text-red-600">Unavailable</span>
+                    ) : (
+                      <>
+                        <span className="text-3xl font-bold text-emerald-700 dark:text-emerald-300">
+                          {providerBalance.currency}{' '}
+                          {(providerBalance.balance ?? 0).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  {providerBalance.error ? (
+                    <p className="text-xs text-red-600 mt-1 max-w-md break-all">
+                      {providerBalance.error}
+                    </p>
+                  ) : providerBalance.fetchedAt ? (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Updated {new Date(providerBalance.fetchedAt).toLocaleString()}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchProviderBalance}
+                disabled={balanceLoading}
+              >
+                {balanceLoading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                Refresh
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Create Form */}
         {showForm && (
@@ -524,9 +743,12 @@ export default function AdminSMSPage() {
                     onChange={(e) =>
                       setNewSenderId(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 11))
                     }
-                    placeholder="e.g. WANJIKU2027"
+                    placeholder="e.g. Wanjiku2027"
                     maxLength={11}
-                    className="mt-1 font-mono uppercase"
+                    className="mt-1 font-mono normal-case"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                   />
                   <p
                     className={`text-xs mt-1 ${
@@ -666,9 +888,37 @@ export default function AdminSMSPage() {
                           {new Date(s.created_at).toLocaleDateString()}
                         </td>
                         <td className="py-3 px-2 text-right">
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(s.id)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          <div className="inline-flex items-center gap-1 justify-end">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEdit(s)}
+                              aria-label="Edit sender ID"
+                              title="Edit"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            {s.is_active && s.is_approved ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openDelete(s, 'deactivate')}
+                                aria-label="Deactivate sender ID"
+                                title="Deactivate"
+                              >
+                                <Power className="h-4 w-4 text-amber-600" />
+                              </Button>
+                            ) : null}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openDelete(s, 'hard')}
+                              aria-label="Delete sender ID"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -702,6 +952,148 @@ export default function AdminSMSPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Edit Sender ID Dialog */}
+        <Dialog open={!!editing} onOpenChange={(open) => !open && closeEdit()}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Sender ID</DialogTitle>
+              <DialogDescription>
+                {editing?.candidates?.users?.full_name
+                  ? `Update the sender ID for ${editing.candidates.users.full_name}.`
+                  : 'Update sender ID details.'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Sender ID</Label>
+                <Input
+                  value={editSenderId}
+                  onChange={(e) =>
+                    setEditSenderId(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 11))
+                  }
+                  maxLength={11}
+                  className="mt-1 font-mono"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+                <p
+                  className={`text-xs mt-1 ${
+                    editSenderId && !SENDER_ID_RE.test(editSenderId.trim())
+                      ? 'text-red-600'
+                      : 'text-muted-foreground'
+                  }`}
+                >
+                  {editSenderId.length}/11 · letters and digits, must start with a letter
+                </p>
+              </div>
+              <div>
+                <Label>Cost per SMS (KES)</Label>
+                <Input
+                  type="number"
+                  step="0.10"
+                  min="0.50"
+                  max="100"
+                  value={editCost}
+                  onChange={(e) => setEditCost(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Admin Notes</Label>
+                <Input
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="Optional notes"
+                  className="mt-1"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editIsActive}
+                  onChange={(e) => setEditIsActive(e.target.checked)}
+                  className="rounded"
+                />
+                Active (candidate can send SMS with this sender ID)
+              </label>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={closeEdit} disabled={editSaving}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditSave} disabled={editSaving}>
+                {editSaving ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                )}
+                Save changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete / Deactivate confirm */}
+        <AlertDialog
+          open={!!pendingDelete}
+          onOpenChange={(open) => !open && !deleting && setPendingDelete(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {deleteMode === 'hard' ? 'Delete sender ID?' : 'Deactivate sender ID?'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {deleteMode === 'hard' ? (
+                  <>
+                    This permanently removes sender ID{' '}
+                    <span className="font-mono font-semibold">
+                      {pendingDelete?.sender_id}
+                    </span>{' '}
+                    for {pendingDelete?.candidates?.users?.full_name || 'this candidate'}. This
+                    cannot be undone.
+                  </>
+                ) : (
+                  <>
+                    Sender ID{' '}
+                    <span className="font-mono font-semibold">
+                      {pendingDelete?.sender_id}
+                    </span>{' '}
+                    will stop working immediately for{' '}
+                    {pendingDelete?.candidates?.users?.full_name || 'this candidate'}. You can
+                    reactivate it later from the Edit dialog.
+                  </>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleConfirmDelete();
+                }}
+                disabled={deleting}
+                className={
+                  deleteMode === 'hard'
+                    ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                    : undefined
+                }
+              >
+                {deleting ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : deleteMode === 'hard' ? (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                ) : (
+                  <Power className="h-4 w-4 mr-2" />
+                )}
+                {deleteMode === 'hard' ? 'Delete permanently' : 'Deactivate'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </PermissionGuard>
   );

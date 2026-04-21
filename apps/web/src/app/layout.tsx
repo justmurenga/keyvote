@@ -37,7 +37,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_KE',
-    url: 'https://myvote.ke',
+    url: 'https://keyvote.online',
     title: 'myVote Kenya - Empowering Democracy',
     description: 'Kenya\'s comprehensive election management platform. Follow candidates, participate in polls, track real-time election results. Available on Web, Mobile & USSD.',
     siteName: 'myVote Kenya',

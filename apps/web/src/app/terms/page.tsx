@@ -89,7 +89,7 @@ export default function TermsPage() {
             <h2>13. Contact</h2>
             <p>For questions about these Terms, contact us:</p>
             <ul>
-              <li>Email: support@myvote.ke</li>
+              <li>Email: support@keyvote.online</li>
               <li>WhatsApp: +254 733 638 940</li>
             </ul>
           </div>

@@ -9,6 +9,11 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { TransactionType, TransactionStatus } from '@myvote/database';
+import {
+  findBillableItem,
+  transactionTypeForItem,
+  type BillableItem,
+} from '@/lib/billable-items';
 
 export interface WalletBalance {
   balance: number;
@@ -595,4 +600,165 @@ export async function unfreezeWallet(walletId: string): Promise<void> {
   if (error) {
     throw new Error('Failed to unfreeze wallet');
   }
+}
+
+// ---------------------------------------------------------------
+// Unified billable-item charging
+// ---------------------------------------------------------------
+
+export interface ChargeWalletForItemOptions {
+  /** How many units of this item to purchase (default 1). */
+  quantity?: number;
+  /** Optional override description; falls back to item.name. */
+  description?: string;
+  /** Optional reference string stored on the transaction. */
+  reference?: string;
+  /** Extra metadata stored on the transaction. */
+  metadata?: Record<string, unknown>;
+  /**
+   * Whether to also insert a row into `user_entitlements` so the user
+   * can later "consume" what they bought. Defaults to true. Set to
+   * false for one-shot consumables (e.g. invite SMS) that are
+   * delivered immediately by the calling route.
+   */
+  grantEntitlement?: boolean;
+}
+
+export interface ChargeWalletForItemResult {
+  transactionId: string;
+  walletId: string;
+  charged: number;
+  item: BillableItem;
+  entitlementId?: string;
+}
+
+/**
+ * Charge a user's wallet for a billable item.
+ *
+ * This is the **single entry point** every route should use when a
+ * voter / candidate / agent pays for something inside myVote so that
+ * pricing, transaction types and entitlements stay consistent across
+ * the app.
+ *
+ * Throws on:
+ *  - Unknown / inactive billable item
+ *  - Frozen wallet
+ *  - Insufficient balance
+ */
+export async function chargeWalletForItem(
+  userId: string,
+  itemId: string,
+  options: ChargeWalletForItemOptions = {},
+): Promise<ChargeWalletForItemResult> {
+  const item = await findBillableItem(itemId);
+  if (!item) {
+    throw new Error(`Billable item "${itemId}" not found or inactive`);
+  }
+
+  const purchaseQty = Math.max(1, Math.floor(options.quantity ?? 1));
+  const totalCost = Number(item.price) * purchaseQty;
+  if (!Number.isFinite(totalCost) || totalCost <= 0) {
+    throw new Error(`Invalid price for billable item "${itemId}"`);
+  }
+
+  const wallet = (await getOrCreateWallet(userId)) as {
+    id: string;
+    balance: number;
+    is_frozen: boolean;
+  };
+
+  if (wallet.is_frozen) {
+    throw new Error('Wallet is frozen');
+  }
+  if ((wallet.balance || 0) < totalCost) {
+    const err: Error & {
+      code?: string;
+      required?: number;
+      available?: number;
+    } = new Error('Insufficient wallet balance');
+    err.code = 'INSUFFICIENT_FUNDS';
+    err.required = totalCost;
+    err.available = wallet.balance || 0;
+    throw err;
+  }
+
+  const txType = transactionTypeForItem(item);
+  const description =
+    options.description ||
+    `${item.name}${purchaseQty > 1 ? ` x${purchaseQty}` : ''}`;
+  const reference =
+    options.reference || `item-${item.id}-${Date.now()}`;
+
+  const transactionId = await debitWallet({
+    walletId: wallet.id,
+    type: txType,
+    amount: totalCost,
+    description,
+    reference,
+    metadata: {
+      itemId: item.id,
+      itemName: item.name,
+      category: item.category || null,
+      purchaseQty,
+      unitPrice: item.price,
+      ...(options.metadata || {}),
+    },
+  });
+
+  // Grant entitlement (best-effort; never roll back the charge).
+  let entitlementId: string | undefined;
+  if (options.grantEntitlement !== false) {
+    try {
+      const adminClient = createAdminClient();
+      const totalUnits =
+        item.quantity != null ? Number(item.quantity) * purchaseQty : null;
+      const baseExpiry = item.validity_days
+        ? Date.now() + Number(item.validity_days) * 86400_000
+        : null;
+      const expiresAt = baseExpiry
+        ? new Date(
+            baseExpiry + (item.grace_period_days || 0) * 86400_000,
+          ).toISOString()
+        : null;
+
+      const { data: ent } = await adminClient
+        .from('user_entitlements')
+        .insert({
+          user_id: userId,
+          item_id: item.id,
+          item_name: item.name,
+          category: item.category || null,
+          quantity_total: totalUnits,
+          quantity_remaining: totalUnits,
+          unit_price: item.price,
+          amount_paid: totalCost,
+          transaction_id: transactionId,
+          status: 'active',
+          expires_at: expiresAt,
+          metadata: {
+            purchaseQty,
+            source: options.metadata?.source || 'wallet_charge',
+            grace_period_days: item.grace_period_days || 0,
+            terms: item.terms || null,
+            ...(options.metadata || {}),
+          },
+        } as any)
+        .select('id')
+        .single();
+      entitlementId = (ent as any)?.id;
+    } catch (entErr) {
+      console.warn(
+        '[chargeWalletForItem] Failed to record entitlement (non-fatal):',
+        entErr,
+      );
+    }
+  }
+
+  return {
+    transactionId,
+    walletId: wallet.id,
+    charged: totalCost,
+    item,
+    entitlementId,
+  };
 }

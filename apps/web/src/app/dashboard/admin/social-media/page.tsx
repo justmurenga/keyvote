@@ -27,7 +27,7 @@ export default function AdminSocialMediaSettingsPage() {
     facebookUrl: 'https://facebook.com/myvotekenya',
     instagramUrl: 'https://instagram.com/myvotekenya',
     tiktokUrl: 'https://tiktok.com/@myvotekenya',
-    supportEmail: 'support@myvote.ke',
+    supportEmail: 'support@keyvote.online',
     supportPhone: '+254 733 638 940',
     whatsappPhone: '+254 733 638 940',
     ussdCode: '*384*VOTE#',
@@ -211,7 +211,7 @@ export default function AdminSocialMediaSettingsPage() {
               <Input
                 id="supportEmail"
                 type="email"
-                placeholder="support@myvote.ke"
+                placeholder="support@keyvote.online"
                 value={settings.supportEmail}
                 onChange={(e) => handleInputChange('supportEmail', e.target.value)}
               />

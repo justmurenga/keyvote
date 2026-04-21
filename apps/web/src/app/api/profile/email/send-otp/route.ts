@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedEmail = rawEmail.trim().toLowerCase();
-    if (!isValidEmail(normalizedEmail) || normalizedEmail.endsWith('@myvote.ke')) {
+    if (!isValidEmail(normalizedEmail) || normalizedEmail.endsWith('@myvote.ke') || normalizedEmail.endsWith('@keyvote.online')) {
       return NextResponse.json(
         { error: 'Please enter a valid email address' },
         { status: 400 }
