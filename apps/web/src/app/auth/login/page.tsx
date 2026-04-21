@@ -144,10 +144,12 @@ function LoginPageContent() {
     }
   };
 
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Guard so the auto-submit effect only fires once per filled OTP
+  const autoSubmittedRef = useRef<string | null>(null);
+
+  const submitVerifyOTP = async () => {
     const otpCode = otp.join('');
-    
+
     if (otpCode.length !== 6) {
       toast({
         variant: 'destructive',
@@ -211,10 +213,37 @@ function LoginPageContent() {
         title: 'Verification failed',
         description: error instanceof Error ? error.message : 'Please try again.',
       });
+      // Allow the user to retry auto-submit after a failure
+      autoSubmittedRef.current = null;
     } finally {
       setIsLoading(false);
     }
   };
+
+  const handleVerifyOTP = (e: React.FormEvent) => {
+    e.preventDefault();
+    void submitVerifyOTP();
+  };
+
+  // Auto-verify the moment all 6 digits are entered (paste or last keystroke).
+  // Works on every device because it watches the controlled state, not focus.
+  useEffect(() => {
+    if (step !== 'otp') return;
+    const otpCode = otp.join('');
+    if (otpCode.length !== 6) return;
+    if (isLoading) return;
+    if (autoSubmittedRef.current === otpCode) return;
+    autoSubmittedRef.current = otpCode;
+    void submitVerifyOTP();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otp, step]);
+
+  // Reset the auto-submit guard whenever the user clears/edits the OTP
+  useEffect(() => {
+    if (otp.join('').length < 6) {
+      autoSubmittedRef.current = null;
+    }
+  }, [otp]);
 
   const handleResendOTP = async () => {
     if (countdown > 0) return;
@@ -398,14 +427,20 @@ function LoginPageContent() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full py-6" disabled={isLoading}>
+              <Button
+                type="submit"
+                className="w-full py-6"
+                disabled={isLoading || otp.join('').length !== 6}
+              >
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Verifying...
                   </>
-                ) : (
+                ) : otp.join('').length === 6 ? (
                   'Sign In'
+                ) : (
+                  'Enter the 6-digit code'
                 )}
               </Button>
 

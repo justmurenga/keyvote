@@ -20,10 +20,10 @@ export async function POST(request: NextRequest) {
     // Normalize phone number
     const normalizedPhone = normalizePhoneNumber(phone);
 
-    // Check if phone was verified via OTP
-    if (!isPhoneVerified(normalizedPhone)) {
+    // Check if phone was verified via OTP (persisted in Supabase)
+    if (!(await isPhoneVerified(normalizedPhone))) {
       return NextResponse.json(
-        { error: 'Phone number not verified. Please verify your phone first.' },
+        { error: 'Phone number not verified. Please request a new code and verify before signing in.' },
         { status: 400 }
       );
     }
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       .eq('id', existingUser.id);
 
     // Clear OTP
-    clearOTP(normalizedPhone);
+    await clearOTP(normalizedPhone);
 
     // Return the magic link for client-side verification
     return NextResponse.json({

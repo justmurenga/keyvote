@@ -82,17 +82,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limit
-    if (isRateLimited(identifier)) {
+    if (await isRateLimited(identifier)) {
       return NextResponse.json(
-        { error: 'Too many OTP requests. Please try again later.' },
+        { error: 'Too many OTP requests. Please try again in an hour.' },
         { status: 429 }
       );
     }
 
-    // Generate + store OTP
+    // Generate + store OTP (persisted in Supabase so it works across containers)
     const otp = generateOTP(6);
-    storeOTP(identifier, otp, 10);
-    trackOTPRequest(identifier);
+    await storeOTP(identifier, otp, 10);
+    await trackOTPRequest(identifier);
 
     // Deliver OTP
     if (isEmailBased) {

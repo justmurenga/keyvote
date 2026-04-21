@@ -29,8 +29,8 @@ export async function POST(request: NextRequest) {
 
     console.log('[verify-otp] Identifier:', identifier, 'isEmailBased:', isEmailBased);
 
-    // Verify OTP
-    const verification = verifyStoredOTP(identifier, otp);
+    // Verify OTP (persisted in Supabase)
+    const verification = await verifyStoredOTP(identifier, otp);
     console.log('[verify-otp] Verification result:', verification);
 
     if (!verification.valid) {
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
         .eq('id', u.id);
 
       // Clear OTP after successful verification
-      clearOTP(identifier);
+      await clearOTP(identifier);
 
       // Create session data
       const sessionData = {
@@ -97,8 +97,15 @@ export async function POST(request: NextRequest) {
         expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
       };
 
-      // Create response with session cookie
-      const mobileAccessToken = createMobileAccessToken(u.id, u.role);
+      // Mobile access token is optional — only used by the native app.
+      // If MOBILE_API_TOKEN_SECRET / NEXTAUTH_SECRET isn't configured we
+      // still want web login to succeed, so swallow the error here.
+      let mobileAccessToken: string | null = null;
+      try {
+        mobileAccessToken = createMobileAccessToken(u.id, u.role);
+      } catch (err) {
+        console.warn('[verify-otp] Skipping mobile token (secret not set):', (err as Error).message);
+      }
 
       const response = NextResponse.json({
         success: true,

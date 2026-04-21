@@ -31,12 +31,15 @@ export async function POST(request: NextRequest) {
     const normalizedPhone = phone ? normalizePhoneNumber(phone) : null;
     const verifiedIdentifier = isEmailBased ? normalizedEmail! : normalizedPhone!;
 
-    // Check if identifier was verified via OTP
-    const verified = isPhoneVerified(verifiedIdentifier);
+    // Check if identifier was verified via OTP (persisted in Supabase)
+    const verified = await isPhoneVerified(verifiedIdentifier);
     if (!verified) {
-      console.log('Verification check failed for:', verifiedIdentifier);
+      console.log('[register] Verification check failed for:', verifiedIdentifier);
       return NextResponse.json(
-        { error: `${isEmailBased ? 'Email' : 'Phone number'} not verified. Please verify first.` },
+        {
+          error: `Your ${isEmailBased ? 'email address' : 'phone number'} has not been verified yet. Please request a new code and verify before continuing.`,
+          needsVerification: true,
+        },
         { status: 400 }
       );
     }
@@ -152,7 +155,7 @@ export async function POST(request: NextRequest) {
     // constraint on user_preferences.user_id.
 
     // Clear OTP after successful registration
-    clearOTP(verifiedIdentifier);
+    await clearOTP(verifiedIdentifier);
 
     return NextResponse.json({
       success: true,
