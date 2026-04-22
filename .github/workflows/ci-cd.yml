@@ -140,7 +140,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: production
-      url: https://myvote.ke
+      url: https://keyvote.online
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -172,7 +172,7 @@ jobs:
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     environment:
       name: staging
-      url: https://staging.myvote.ke
+      url: https://staging.keyvote.online
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -4,7 +4,7 @@ SET value = value || '{
   "supportPhone": "+254 733 638 940",
   "whatsappPhone": "+254 733 638 940",
   "ussdCode": "*384*VOTE#",
-  "supportEmail": "support@myvote.ke",
+  "supportEmail": "support@keyvote.online",
   "facebookUrl": "https://facebook.com/myvotekenya",
   "instagramUrl": "https://instagram.com/myvotekenya",
   "tiktokUrl": "https://tiktok.com/@myvotekenya"

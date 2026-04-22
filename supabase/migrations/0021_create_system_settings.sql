@@ -17,7 +17,7 @@ INSERT INTO system_settings (key, value) VALUES
     "siteName": "myVote Kenya",
     "supportPhone": "+254 700 000 000",
     "ussdCode": "*123#",
-    "supportEmail": "support@myvote.co.ke",
+    "supportEmail": "support@keyvote.online",
     "maintenanceMode": false,
     "registrationOpen": true,
     "maxPollsPerUser": "5",

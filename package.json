@@ -52,9 +52,7 @@
   "pnpm": {
     "overrides": {
       "@supabase/supabase-js": "2.39.8",
-      "@supabase/postgrest-js": "1.9.2",
-      "@types/react": "18.3.28",
-      "@types/react-dom": "18.3.7"
+      "@supabase/postgrest-js": "1.9.2"
     }
   }
 }
