@@ -1,6 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
+import { verifyMobileAccessToken } from './mobile-token';
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface AuthenticatedUser {
   id: string;
@@ -39,15 +43,34 @@ const USER_PROFILE_FIELDS = `
 `;
 
 /**
- * Resolve the current user ID from Supabase auth or OTP session cookie.
+ * Resolve the current user ID from any of:
+ *   1. The mobile-app `Authorization: Bearer <token>` header
+ *      (issued by `/api/auth/verify-otp`).
+ *   2. Supabase auth session.
+ *   3. The custom `myvote-session` cookie (web OTP login).
+ *   4. (Dev only) the `x-myvote-user-id` header used by the mobile app
+ *      against a local web server when no mobile token is available yet.
+ *
  * Works in both page and API route contexts.
  */
 export async function resolveUserId(supabase: any): Promise<string | null> {
-  // Try Supabase auth first
+  // 1. Mobile bearer token (works without cookies)
+  try {
+    const headerStore = await headers();
+    const authHeader = headerStore.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const payload = verifyMobileAccessToken(authHeader.slice(7).trim());
+      if (payload?.sub) return payload.sub;
+    }
+  } catch {
+    // headers() unavailable in this context
+  }
+
+  // 2. Supabase auth
   const { data: { user: supabaseUser } } = await supabase.auth.getUser();
   if (supabaseUser?.id) return supabaseUser.id;
 
-  // Fallback: check custom session cookie (for OTP login)
+  // 3. Custom session cookie (for OTP login)
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('myvote-session')?.value;
   if (sessionCookie) {
@@ -58,6 +81,19 @@ export async function resolveUserId(supabase: any): Promise<string | null> {
       }
     } catch {
       // Invalid session
+    }
+  }
+
+  // 4. Dev-only header fallback (mobile -> local web)
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      const headerStore = await headers();
+      const headerUserId = headerStore.get('x-myvote-user-id');
+      if (headerUserId && UUID_REGEX.test(headerUserId)) {
+        return headerUserId;
+      }
+    } catch {
+      // ignore
     }
   }
 

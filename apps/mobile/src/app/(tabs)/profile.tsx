@@ -125,6 +125,9 @@ export default function ProfileScreen() {
     { label: 'System', value: 'system', icon: 'phone-portrait-outline' },
   ];
 
+  const isCandidate = profile.role === 'candidate';
+  const isAgentLike = ['candidate', 'agent', 'admin', 'super_admin'].includes(profile.role || '');
+
   const menuSections = [
     {
       title: 'Account',
@@ -132,6 +135,12 @@ export default function ProfileScreen() {
         { icon: 'person-outline', label: 'Edit Profile', action: 'edit-profile' },
         { icon: 'location-outline', label: 'Polling Station', action: 'polling-station' },
         { icon: 'shield-checkmark-outline', label: 'Verification', action: 'verification' },
+        ...(isCandidate
+          ? [{ icon: 'megaphone-outline', label: 'Campaign Dashboard', action: 'candidate-dashboard' }]
+          : []),
+        ...(isAgentLike
+          ? [{ icon: 'people-circle-outline', label: 'Agent Dashboard', action: 'agent-dashboard' }]
+          : []),
       ],
     },
     {
@@ -140,6 +149,7 @@ export default function ProfileScreen() {
         { icon: 'heart-outline', label: 'Following', action: 'following' },
         { icon: 'stats-chart-outline', label: 'My Votes', action: 'my-votes' },
         { icon: 'wallet-outline', label: 'Wallet', action: 'wallet' },
+        { icon: 'flag-outline', label: 'Reports', action: 'reports' },
       ],
     },
     {
@@ -166,22 +176,31 @@ export default function ProfileScreen() {
   const handleMenuPress = (action: string) => {
     switch (action) {
       case 'edit-profile':
-        Alert.alert('Edit Profile', 'Profile editing coming soon!');
+        router.push('/profile-edit' as any);
         break;
       case 'polling-station':
-        Alert.alert('Polling Station', 'Update your polling station information.');
+        router.push('/profile-edit' as any);
         break;
       case 'verification':
-        Alert.alert('Verification', 'Verify your account details.');
+        router.push('/profile-edit' as any);
+        break;
+      case 'candidate-dashboard':
+        router.push('/candidate-dashboard' as any);
+        break;
+      case 'agent-dashboard':
+        router.push('/agent-dashboard' as any);
         break;
       case 'following':
-        router.push('/(tabs)/candidates');
+        router.push('/following' as any);
         break;
       case 'my-votes':
-        Alert.alert('My Votes', 'View your voting history.');
+        router.push('/(tabs)/polls' as any);
         break;
       case 'wallet':
-        Alert.alert('Wallet', 'Wallet feature coming soon!');
+        router.push('/wallet' as any);
+        break;
+      case 'reports':
+        router.push('/reports' as any);
         break;
       case 'notifications':
         router.push('/notifications');

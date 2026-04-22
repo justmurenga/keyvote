@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   ArrowLeft, 
@@ -86,8 +86,8 @@ const GENDER_LABELS: Record<string, string> = {
 };
 
 export default function PollResultsPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
   const router = useRouter();
-  const [resolvedParams, setResolvedParams] = useState<{ id: string } | null>(null);
   const [poll, setPoll] = useState<PollDetails | null>(null);
   const [candidateResults, setCandidateResults] = useState<CandidateResult[]>([]);
   const [countyResults, setCountyResults] = useState<CountyResult[]>([]);
@@ -99,14 +99,8 @@ export default function PollResultsPage({ params }: { params: Promise<{ id: stri
   const [autoRefresh, setAutoRefresh] = useState(false);
 
   useEffect(() => {
-    params.then(setResolvedParams);
-  }, [params]);
-
-  useEffect(() => {
-    if (resolvedParams?.id) {
-      fetchPollData();
-    }
-  }, [resolvedParams?.id]);
+    fetchPollData();
+  }, [resolvedParams.id]);
 
   // Auto-refresh for active polls
   useEffect(() => {
@@ -117,7 +111,6 @@ export default function PollResultsPage({ params }: { params: Promise<{ id: stri
   }, [autoRefresh, poll?.status]);
 
   const fetchPollData = async () => {
-    if (!resolvedParams?.id) return;
     setIsLoading(true);
     try {
       // Fetch poll details and overall results
@@ -139,7 +132,6 @@ export default function PollResultsPage({ params }: { params: Promise<{ id: stri
   };
 
   const fetchResults = async () => {
-    if (!resolvedParams?.id) return;
     try {
       const resultsRes = await fetch(`/api/admin/polls/${resolvedParams.id}/results`);
       if (resultsRes.ok) {
