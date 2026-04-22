@@ -657,9 +657,14 @@ export async function chargeWalletForItem(
 
   const purchaseQty = Math.max(1, Math.floor(options.quantity ?? 1));
   const totalCost = Number(item.price) * purchaseQty;
-  if (!Number.isFinite(totalCost) || totalCost <= 0) {
+  if (!Number.isFinite(totalCost) || totalCost < 0) {
     throw new Error(`Invalid price for billable item "${itemId}"`);
   }
+
+  // PRICING RULE: a price of 0 means the billable item is FREE — no wallet
+  // balance is required and no debit is recorded. The entitlement (if any)
+  // is still granted below so usage is auditable.
+  const isFree = totalCost === 0;
 
   const wallet = (await getOrCreateWallet(userId)) as {
     id: string;
@@ -667,19 +672,21 @@ export async function chargeWalletForItem(
     is_frozen: boolean;
   };
 
-  if (wallet.is_frozen) {
-    throw new Error('Wallet is frozen');
-  }
-  if ((wallet.balance || 0) < totalCost) {
-    const err: Error & {
-      code?: string;
-      required?: number;
-      available?: number;
-    } = new Error('Insufficient wallet balance');
-    err.code = 'INSUFFICIENT_FUNDS';
-    err.required = totalCost;
-    err.available = wallet.balance || 0;
-    throw err;
+  if (!isFree) {
+    if (wallet.is_frozen) {
+      throw new Error('Wallet is frozen');
+    }
+    if ((wallet.balance || 0) < totalCost) {
+      const err: Error & {
+        code?: string;
+        required?: number;
+        available?: number;
+      } = new Error('Insufficient wallet balance');
+      err.code = 'INSUFFICIENT_FUNDS';
+      err.required = totalCost;
+      err.available = wallet.balance || 0;
+      throw err;
+    }
   }
 
   const txType = transactionTypeForItem(item);
@@ -689,21 +696,23 @@ export async function chargeWalletForItem(
   const reference =
     options.reference || `item-${item.id}-${Date.now()}`;
 
-  const transactionId = await debitWallet({
-    walletId: wallet.id,
-    type: txType,
-    amount: totalCost,
-    description,
-    reference,
-    metadata: {
-      itemId: item.id,
-      itemName: item.name,
-      category: item.category || null,
-      purchaseQty,
-      unitPrice: item.price,
-      ...(options.metadata || {}),
-    },
-  });
+  const transactionId = isFree
+    ? `free-${item.id}-${Date.now()}`
+    : await debitWallet({
+        walletId: wallet.id,
+        type: txType,
+        amount: totalCost,
+        description,
+        reference,
+        metadata: {
+          itemId: item.id,
+          itemName: item.name,
+          category: item.category || null,
+          purchaseQty,
+          unitPrice: item.price,
+          ...(options.metadata || {}),
+        },
+      });
 
   // Grant entitlement (best-effort; never roll back the charge).
   let entitlementId: string | undefined;

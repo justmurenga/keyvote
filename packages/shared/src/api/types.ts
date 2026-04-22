@@ -322,6 +322,43 @@ export interface MessageItem {
   created_at: string;
 }
 
+/** Conversation row returned from /api/messages (list view). */
+export interface ConversationItem {
+  id: string;
+  conversation_type: 'candidate_agent' | 'admin_user' | string;
+  candidate_id: string | null;
+  agent_id: string | null;
+  initiator_user_id: string | null;
+  recipient_user_id: string | null;
+  subject: string | null;
+  is_active: boolean;
+  last_message_at: string | null;
+  last_message_preview: string | null;
+  candidate_unread_count?: number;
+  agent_unread_count?: number;
+  initiator_unread_count?: number;
+  recipient_unread_count?: number;
+  created_at: string;
+  candidates?: { id: string; users?: any } | null;
+  agents?: { id: string; users?: any } | null;
+  initiator?: { id: string; full_name: string; phone?: string; role?: string; avatar_url?: string | null } | null;
+  recipient?: { id: string; full_name: string; phone?: string; role?: string; avatar_url?: string | null } | null;
+}
+
+/** Single message inside a conversation thread. */
+export interface ConversationMessage {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string;
+  media_url: string | null;
+  media_type: string | null;
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string;
+  sender?: { id: string; full_name: string; role?: string; avatar_url?: string | null } | null;
+}
+
 // ---------------------------------------------------------------------------
 // Following
 // ---------------------------------------------------------------------------
@@ -332,3 +369,31 @@ export interface FollowingItem {
   followed_at: string;
   candidate: CandidateListItem;
 }
+
+// ---------------------------------------------------------------------------
+// System Settings (shared by web + mobile via /api/settings)
+// ---------------------------------------------------------------------------
+
+export interface SystemSettings {
+  siteName?: string;
+  supportPhone?: string;
+  whatsappPhone?: string;
+  ussdCode?: string;
+  supportEmail?: string;
+  facebookUrl?: string;
+  instagramUrl?: string;
+  tiktokUrl?: string;
+  maintenanceMode?: boolean;
+  registrationOpen?: boolean;
+}
+
+export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
+  siteName: 'myVote Kenya',
+  supportPhone: '+254 733 638 940',
+  whatsappPhone: '+254 733 638 940',
+  ussdCode: '*384*VOTE#',
+  supportEmail: 'support@keyvote.online',
+  facebookUrl: 'https://facebook.com/myvotekenya',
+  instagramUrl: 'https://instagram.com/myvotekenya',
+  tiktokUrl: 'https://tiktok.com/@myvotekenya',
+};

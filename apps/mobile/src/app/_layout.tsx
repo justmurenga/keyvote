@@ -6,6 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '@/stores/auth-store';
 import { useIsDarkMode } from '@/hooks/useTheme';
 import { LoadingScreen } from '@/components/ui';
+import { initSoundPreference } from '@/lib/sound';
 
 // Keep the splash screen visible while we initialize
 SplashScreen.preventAutoHideAsync();
@@ -24,6 +25,9 @@ export default function RootLayout() {
   const isDark = useIsDarkMode();
 
   useEffect(() => {
+    // Load persisted notification-sound preference before any banner can
+    // fire, so the user's choice is honoured from the very first event.
+    initSoundPreference();
     initialize().finally(() => {
       // Hide splash once auth is resolved
       SplashScreen.hideAsync();
@@ -68,6 +72,14 @@ export default function RootLayout() {
             title: 'Submit Announced Results',
             headerBackTitle: 'Back',
           }}
+        />
+        <Stack.Screen
+          name="messages/index"
+          options={{ headerShown: true, title: 'Messages', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
+          name="messages/[id]"
+          options={{ headerShown: true, title: 'Conversation', headerBackTitle: 'Back' }}
         />
       </Stack>
     </QueryClientProvider>

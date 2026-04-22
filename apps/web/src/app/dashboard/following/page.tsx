@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { FollowButton } from '@/components/candidates';
+import { QuickTopUpDialog } from '@/components/wallet/quick-topup-dialog';
 
 interface FollowedCandidate {
   id: string;
@@ -62,7 +63,10 @@ interface CandidateAnalytics {
   poll: { votes: number; total: number; sharePct: number };
 }
 
-const PER_INVITE_SMS_PRICE = 2;
+// Default per-SMS invite price (KES). The live price is fetched from
+// /api/wallet/charge so admin overrides in system_settings.billable_items
+// (including 0 = FREE) are reflected automatically.
+const DEFAULT_PER_INVITE_SMS_PRICE = 1;
 
 const positionColors: Record<string, string> = {
   president: 'bg-purple-500',
@@ -234,22 +238,56 @@ function InviteFriendsDialog({
   open,
   onOpenChange,
   candidate,
+  perSmsPrice,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   candidate: FollowedCandidate | null;
+  perSmsPrice: number;
 }) {
   const { toast } = useToast();
   const [phonesText, setPhonesText] = useState('');
   const [personalMessage, setPersonalMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletFrozen, setWalletFrozen] = useState(false);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [topUpOpen, setTopUpOpen] = useState(false);
 
   const phones = phonesText
     .split(/[\s,;\n]+/)
     .map((p) => p.trim())
     .filter(Boolean);
   const recipientCount = phones.length;
-  const totalCost = recipientCount * PER_INVITE_SMS_PRICE;
+  const totalCost = recipientCount * perSmsPrice;
+  const isFree = perSmsPrice === 0;
+  const insufficient =
+    !isFree && walletBalance !== null && totalCost > walletBalance;
+
+  const fetchWallet = useCallback(async () => {
+    setWalletLoading(true);
+    try {
+      const res = await fetch('/api/wallet/balance', {
+        cache: 'no-store',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWalletBalance(typeof data.balance === 'number' ? data.balance : 0);
+        setWalletFrozen(!!data.isFrozen);
+      } else {
+        setWalletBalance(0);
+      }
+    } catch {
+      setWalletBalance(0);
+    } finally {
+      setWalletLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) fetchWallet();
+  }, [open, fetchWallet]);
 
   const reset = () => {
     setPhonesText('');
@@ -325,8 +363,15 @@ function InviteFriendsDialog({
           <DialogDescription>
             We&apos;ll send a single SMS to each friend from the myVote sender
             ID inviting them to sign up or log in and follow{' '}
-            {candidate?.name ?? 'the candidate'}. Each SMS costs{' '}
-            <strong>KES {PER_INVITE_SMS_PRICE}</strong> from your wallet.
+            {candidate?.name ?? 'the candidate'}.{' '}
+            {isFree ? (
+              <strong>These invites are free — no wallet charge.</strong>
+            ) : (
+              <>
+                Each SMS costs{' '}
+                <strong>KES {perSmsPrice}</strong> from your wallet.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -360,36 +405,120 @@ function InviteFriendsDialog({
             <div>
               <div className="font-medium">{recipientCount} recipient(s)</div>
               <div className="text-xs text-muted-foreground">
-                @ KES {PER_INVITE_SMS_PRICE} per SMS
+                {isFree ? 'Free — no wallet charge' : `@ KES ${perSmsPrice} per SMS`}
               </div>
             </div>
             <div className="text-right">
               <div className="text-xs text-muted-foreground">Total</div>
-              <div className="text-lg font-bold">KES {totalCost}</div>
+              <div className="text-lg font-bold">
+                {isFree ? 'Free' : `KES ${totalCost}`}
+              </div>
             </div>
           </div>
+
+          {/* Wallet balance + sufficiency indicator */}
+          {!isFree && (
+            <div
+              className={
+                'rounded-md border p-3 text-sm flex items-center justify-between ' +
+                (walletFrozen
+                  ? 'border-red-200 bg-red-50'
+                  : insufficient
+                  ? 'border-amber-200 bg-amber-50'
+                  : 'border-emerald-200 bg-emerald-50')
+              }
+            >
+              <div className="flex items-center gap-2">
+                <Wallet
+                  className={
+                    'h-4 w-4 ' +
+                    (walletFrozen
+                      ? 'text-red-600'
+                      : insufficient
+                      ? 'text-amber-600'
+                      : 'text-emerald-600')
+                  }
+                />
+                <div>
+                  <div className="font-medium">
+                    Wallet balance:{' '}
+                    {walletLoading || walletBalance === null
+                      ? '…'
+                      : `KES ${walletBalance.toLocaleString()}`}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {walletFrozen
+                      ? 'Wallet is frozen — contact support'
+                      : insufficient
+                      ? `Need KES ${(totalCost - (walletBalance || 0)).toLocaleString()} more to send`
+                      : recipientCount > 0
+                      ? `After this send: KES ${((walletBalance || 0) - totalCost).toLocaleString()}`
+                      : 'Sufficient for invites'}
+                  </div>
+                </div>
+              </div>
+              {insufficient && !walletFrozen && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setTopUpOpen(true)}
+                >
+                  Top up
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/wallet">
-              <Wallet className="h-4 w-4 mr-2" />
-              Top up wallet
-            </Link>
+          <Button
+            variant="outline"
+            onClick={() => setTopUpOpen(true)}
+            disabled={walletFrozen}
+          >
+            <Wallet className="h-4 w-4 mr-2" />
+            Top up wallet
           </Button>
           <Button
             onClick={handleSend}
-            disabled={submitting || recipientCount === 0}
+            disabled={
+              submitting ||
+              recipientCount === 0 ||
+              walletFrozen ||
+              (!isFree && (walletLoading || walletBalance === null || insufficient))
+            }
+            title={
+              walletFrozen
+                ? 'Your wallet is frozen'
+                : insufficient
+                ? 'Insufficient wallet balance — top up to continue'
+                : undefined
+            }
           >
             {submitting ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <Send className="h-4 w-4 mr-2" />
             )}
-            Send invites
+            {insufficient && !submitting ? 'Insufficient balance' : 'Send invites'}
           </Button>
         </DialogFooter>
       </DialogContent>
+      <QuickTopUpDialog
+        open={topUpOpen}
+        onOpenChange={setTopUpOpen}
+        suggestedAmount={
+          insufficient && walletBalance !== null
+            ? Math.max(10, totalCost - walletBalance)
+            : totalCost > 0
+            ? totalCost
+            : undefined
+        }
+        onSuccess={() => {
+          // Refetch wallet so the user can immediately send invites
+          fetchWallet();
+        }}
+      />
     </Dialog>
   );
 }
@@ -403,6 +532,9 @@ export default function FollowingPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteCandidate, setInviteCandidate] =
     useState<FollowedCandidate | null>(null);
+  const [perSmsPrice, setPerSmsPrice] = useState<number>(
+    DEFAULT_PER_INVITE_SMS_PRICE,
+  );
   const { toast } = useToast();
 
   const fetchFollowing = useCallback(async () => {
@@ -459,6 +591,30 @@ export default function FollowingPage() {
   useEffect(() => {
     fetchFollowing();
   }, [fetchFollowing]);
+
+  // Load the live per-SMS invite price from the unified billable-items
+  // catalog. If the admin has set it to 0 the dialog will show "Free".
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/wallet/charge', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const item = (data?.pricing || []).find(
+          (p: { type: string; amount: number }) => p.type === 'voter_invite_sms',
+        );
+        if (!cancelled && item && Number.isFinite(Number(item.amount))) {
+          setPerSmsPrice(Number(item.amount));
+        }
+      } catch {
+        /* keep default */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (candidates.length > 0) fetchAnalytics();
@@ -540,6 +696,7 @@ export default function FollowingPage() {
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         candidate={inviteCandidate}
+        perSmsPrice={perSmsPrice}
       />
     </div>
   );

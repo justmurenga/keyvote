@@ -6,6 +6,7 @@ import {
   subscribeToNotifications,
   type AppNotification,
 } from '@/services/notifications';
+import { playNotificationSound } from '@/lib/sound';
 
 /**
  * Listens for realtime notifications, returns the live list and unread count.
@@ -42,6 +43,9 @@ export function useNotifications() {
     const unsub = subscribeToNotifications(userId, (n) => {
       setNotifications((prev) => [n, ...prev]);
       setUnreadCount((c) => c + 1);
+      // Mirrors the web behaviour: play the user's preferred chime / haptic
+      // cue when a brand-new notification arrives in real time.
+      playNotificationSound();
       if (lastBannerRef.current !== n.id) {
         lastBannerRef.current = n.id;
         setLatestBanner(n);

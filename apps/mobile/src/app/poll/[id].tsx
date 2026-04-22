@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   optionInfo: { flex: 1 },
-  optionName: { fontSize: FontSize.md, fontWeight: '600' },
+  optionName: { fontSize: FontSize.base, fontWeight: '600' },
   optionParty: { fontSize: FontSize.xs, marginTop: 2 },
   barTrack: {
     height: 8,

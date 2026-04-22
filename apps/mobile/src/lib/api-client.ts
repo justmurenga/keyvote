@@ -41,6 +41,7 @@ export {
   resultsApi,
   messagesApi,
   followingApi,
+  settingsApi,
   ApiError,
 } from '@myvote/shared';
 
@@ -62,5 +63,10 @@ export type {
   ReportItem,
   ResultItem,
   MessageItem,
+  ConversationItem,
+  ConversationMessage,
   FollowingItem,
+  SystemSettings,
 } from '@myvote/shared';
+
+export { DEFAULT_SYSTEM_SETTINGS } from '@myvote/shared';

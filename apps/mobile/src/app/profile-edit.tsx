@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useTheme } from '@/hooks/useTheme';
@@ -106,6 +107,45 @@ export default function ProfileEditScreen() {
     onError: (err: any) => Alert.alert('Error', err?.message || 'Failed to remove photo'),
   });
 
+  /**
+   * Profile photo upload — mirrors the web `/dashboard/profile` flow by
+   * POSTing a multipart FormData to the same `/api/profile/photo` route via
+   * the shared `profileApi.uploadPhoto`. No extra endpoint duplication.
+   */
+  const uploadPhoto = useMutation({
+    mutationFn: async () => {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) throw new Error('Photo library permission denied');
+
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (picked.canceled || !picked.assets?.length) {
+        throw new Error('cancelled');
+      }
+      const asset = picked.assets[0];
+      const form = new FormData();
+      // RN multipart file shape understood by react-native fetch.
+      form.append('file', {
+        uri: asset.uri,
+        name: asset.fileName || `profile-${Date.now()}.jpg`,
+        type: asset.mimeType || 'image/jpeg',
+      } as any);
+      return profileApi.uploadPhoto(form);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', 'me'] });
+      Alert.alert('Photo updated', 'Your profile photo has been saved.');
+    },
+    onError: (err: any) => {
+      if (err?.message === 'cancelled') return;
+      Alert.alert('Upload failed', err?.message || 'Could not upload photo');
+    },
+  });
+
   if (isLoading) return <LoadingScreen message="Loading profile..." />;
   if (error || !data) {
     return (
@@ -146,6 +186,13 @@ export default function ProfileEditScreen() {
             {profile.is_verified && <Badge label="Verified" variant="success" />}
           </View>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: Spacing.md }}>
+            <Button
+              title={uploadPhoto.isPending ? 'Uploading…' : profile.profile_photo_url ? 'Change Photo' : 'Add Photo'}
+              variant="outline"
+              size="sm"
+              disabled={uploadPhoto.isPending}
+              onPress={() => uploadPhoto.mutate()}
+            />
             <Button
               title="Remove Photo"
               variant="outline"

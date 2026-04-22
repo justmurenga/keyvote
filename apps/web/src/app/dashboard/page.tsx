@@ -5,6 +5,8 @@ import { Users, BarChart3, Vote, Wallet, Heart, UserPlus, TrendingUp } from 'luc
 import Link from 'next/link';
 import { VoterAggregateCard } from '@/components/dashboard/voter-aggregate-card';
 import { ProfileCompletionBanner } from '@/components/dashboard/profile-completion-banner';
+import { CandidateEngagementBanner } from '@/components/dashboard/candidate-engagement-banner';
+import { AgentInviteVotersBanner } from '@/components/dashboard/agent-invite-voters-banner';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -116,6 +118,10 @@ export default async function DashboardPage() {
       {/* Profile Completion Banner */}
       <ProfileCompletionBanner />
 
+      {/* Role-aware action banners (mirrors profile-completion banner styling) */}
+      {userRole === 'candidate' && <CandidateEngagementBanner />}
+      <AgentInviteVotersBanner role={userRole} />
+
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
@@ -137,6 +143,9 @@ export default async function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      {/* Voter Aggregates - Regional Stats (drill-down cards) */}
+      <VoterAggregateCard />
 
       {/* Quick Actions */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -234,9 +243,6 @@ export default async function DashboardPage() {
           </Card>
         </Link>
       )}
-
-      {/* Voter Aggregates - Regional Stats */}
-      <VoterAggregateCard />
     </div>
   );
 }

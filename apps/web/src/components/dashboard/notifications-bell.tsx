@@ -15,6 +15,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface NotificationItem {
   id: string;
@@ -158,7 +159,12 @@ export function NotificationsBell() {
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        <Bell className="h-5 w-5" />
+        <Bell
+          className={cn(
+            'h-5 w-5 origin-top transition-colors',
+            unreadCount > 0 && 'text-destructive animate-bell-shake',
+          )}
+        />
         {badge && (
           <span className="absolute -top-1 -right-1 min-w-[1rem] h-4 px-1 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center">
             {badge}

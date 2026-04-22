@@ -84,6 +84,20 @@ export default function HomeScreen() {
       bg: colors.errorLight,
       route: '/(tabs)/profile' as const,
     },
+    {
+      icon: 'chatbubbles' as const,
+      label: 'Messages',
+      color: colors.info,
+      bg: colors.infoLight,
+      route: '/messages' as const,
+    },
+    {
+      icon: 'wallet' as const,
+      label: 'Wallet',
+      color: colors.success,
+      bg: colors.successLight,
+      route: '/wallet' as const,
+    },
     ...(isFieldRole
       ? [
           {
@@ -200,7 +214,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               key={i}
               style={[styles.actionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={() => router.push(action.route)}
+              onPress={() => router.push(action.route as any)}
               activeOpacity={0.7}
             >
               <View style={[styles.actionIcon, { backgroundColor: action.bg }]}>

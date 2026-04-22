@@ -2,6 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveUserId } from '@/lib/auth';
+import { sendSMS, normalizePhoneNumber, calculateSMSCost, getSMSSegments } from '@/lib/sms/airtouch';
+import { sendEmail, isValidEmail } from '@/lib/email';
+import { generateAgentInvitationEmailHTML } from '@/lib/email/templates/agent-invitation';
+import { getOrCreateWallet, debitWallet } from '@/lib/wallet';
+
+const POSITION_LABELS: Record<string, string> = {
+  president: 'President',
+  governor: 'Governor',
+  senator: 'Senator',
+  women_rep: "Women's Representative",
+  mp: 'Member of Parliament',
+  mca: 'Member of County Assembly',
+};
+
+const REGION_LABELS: Record<string, string> = {
+  national: 'National',
+  county: 'County',
+  constituency: 'Constituency',
+  ward: 'Ward',
+  polling_station: 'Polling Station',
+};
+// Suppress unused-var warning when REGION_LABELS isn't referenced elsewhere yet.
+void REGION_LABELS;
 
 /**
  * GET /api/agents - List agents for the current candidate
@@ -307,45 +330,205 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create agent invitation' }, { status: 500 });
     }
 
-    // Build the acceptance URL
+    // Build the acceptance URLs.
+    // - `acceptUrl` is the public link (used in SMS / email — works for both
+    //   registered and unregistered recipients; the public page redirects
+    //   logged-in users into the dashboard automatically).
+    // - `inAppUrl` is the in-app dashboard route, used for the in-app
+    //   notification's action_url so the request opens *inside the system*.
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get('origin') || '';
     const acceptUrl = `${baseUrl}/agents/accept/${invitationToken}`;
+    const inAppPath = `/dashboard/agents/accept/${invitationToken}`;
+
+    // Look up the inviting candidate + region info once for use across
+    // in-app notification, SMS and email channels.
+    let candidateName = 'A candidate';
+    let candidatePosition = '';
+    let candidateFollowerCount = 0;
+    let candidatePartyName: string | null = null;
+    try {
+      const { data: candidateUser } = await (adminClient
+        .from('candidates') as any)
+        .select('position, follower_count, users:user_id (full_name), party:political_parties (name)')
+        .eq('id', candidate.id)
+        .single();
+      candidateName = candidateUser?.users?.full_name || candidateName;
+      candidatePosition = candidateUser?.position || '';
+      candidateFollowerCount = candidateUser?.follower_count || 0;
+      candidatePartyName = candidateUser?.party?.name || null;
+    } catch {
+      // best-effort; fall back to defaults
+    }
+
+    // Resolve a human-readable region name for the invited region
+    let regionName = 'National';
+    try {
+      if (pollingStationId) {
+        const { data: r } = await (adminClient.from('polling_stations') as any)
+          .select('display_name').eq('id', pollingStationId).maybeSingle();
+        regionName = r?.display_name || regionName;
+      } else if (wardId) {
+        const { data: r } = await (adminClient.from('wards') as any)
+          .select('name').eq('id', wardId).maybeSingle();
+        regionName = r?.name || regionName;
+      } else if (constituencyId) {
+        const { data: r } = await (adminClient.from('constituencies') as any)
+          .select('name').eq('id', constituencyId).maybeSingle();
+        regionName = r?.name || regionName;
+      } else if (countyId) {
+        const { data: r } = await (adminClient.from('counties') as any)
+          .select('name').eq('id', countyId).maybeSingle();
+        regionName = r?.name || regionName;
+      }
+    } catch {
+      // ignore
+    }
+
+    const positionLabel = POSITION_LABELS[candidatePosition] || candidatePosition;
 
     // ----- In-app notification -----
-    // If we have a registered target user, push a notification so the
-    // mobile / web app can alert them in real-time.
     if (targetUser?.id) {
       try {
-        // Look up the inviting candidate's display name for a friendlier message
-        const { data: candidateUser } = await (adminClient
-          .from('candidates') as any)
-          .select('position, users:user_id (full_name)')
-          .eq('id', candidate.id)
-          .single();
-
-        const candidateName = candidateUser?.users?.full_name || 'A candidate';
-        const position = candidateUser?.position ? ` (${candidateUser.position})` : '';
-
+        const positionSuffix = candidatePosition ? ` (${positionLabel})` : '';
         await (adminClient.from('notifications') as any).insert({
           user_id: targetUser.id,
           type: 'agent_invitation',
           title: 'Campaign Agent Invitation',
-          body: `${candidateName}${position} has invited you to be their campaign agent. Tap to review and accept.`,
-          action_url: `/agents/accept/${invitationToken}`,
+          body: `${candidateName}${positionSuffix} has invited you to be their campaign agent for ${regionName}. Tap to review and accept.`,
+          action_url: inAppPath,
           action_label: 'Review Invitation',
           metadata: {
             agent_id: agent.id,
             candidate_id: candidate.id,
             invitation_token: invitationToken,
             region_type: regionType,
+            region_name: regionName,
             invited_by: candidateName,
           },
         });
       } catch (notifError) {
-        // Notification failure should not break the invite flow
         console.error('Failed to create invitation notification:', notifError);
       }
     }
+
+    // ----- SMS notification (Airtouch) -----
+    // Charges are billed to the inviting candidate's wallet, mirroring the
+    // bulk SMS flow. If the wallet has insufficient balance (or is frozen),
+    // the SMS is skipped — the in-app notification + email still go out
+    // and the response surfaces `smsError` so the UI can prompt a top-up.
+    let smsSent = false;
+    let smsError: string | undefined;
+    let smsCost = 0;
+    if (invitedPhoneFinal) {
+      try {
+        const smsBody =
+          `myVote: ${candidateName}${positionLabel ? ` (${positionLabel})` : ''} has invited you ` +
+          `to be a campaign agent for ${regionName}. ` +
+          `Review & accept: ${acceptUrl}`;
+        const normalizedTo = normalizePhoneNumber(invitedPhoneFinal);
+
+        // Pull the candidate's SMS sender config to match per-segment cost
+        // used everywhere else; default to KES 1.00 if not configured.
+        let costPerSMS = 1.0;
+        try {
+          const { data: senderCfg } = await (adminClient
+            .from('sms_sender_configs') as any)
+            .select('cost_per_sms')
+            .eq('user_id', userId)
+            .maybeSingle();
+          if (senderCfg?.cost_per_sms) costPerSMS = Number(senderCfg.cost_per_sms);
+        } catch {
+          // ignore — fall back to default cost
+        }
+
+        const segments = getSMSSegments(smsBody).segments;
+        smsCost = calculateSMSCost(segments, costPerSMS);
+
+        // Resolve / create the candidate user's wallet and pre-check balance.
+        const wallet = (await getOrCreateWallet(userId)) as {
+          id: string;
+          balance: number;
+          is_frozen: boolean;
+        };
+
+        if (wallet.is_frozen) {
+          smsError = 'Wallet is frozen — SMS not sent';
+        } else if ((wallet.balance ?? 0) < smsCost) {
+          smsError = `Insufficient wallet balance for SMS (need KES ${smsCost.toFixed(2)}, have KES ${(wallet.balance || 0).toFixed(2)})`;
+        } else {
+          const smsRes = await sendSMS({ to: normalizedTo, message: smsBody });
+          if (smsRes.success) {
+            // Only debit on a confirmed send so failed dispatches don't
+            // burn the candidate's balance.
+            try {
+              await debitWallet({
+                walletId: wallet.id,
+                type: 'sms_charge',
+                amount: smsCost,
+                description: `Agent invitation SMS to ${invitedName}`,
+                reference: agent.id,
+                metadata: {
+                  source: 'agent_invitation_sms',
+                  agent_id: agent.id,
+                  candidate_id: candidate.id,
+                  invited_name: invitedName,
+                  invited_phone: normalizedTo,
+                  segments,
+                  cost_per_sms: costPerSMS,
+                },
+              });
+              smsSent = true;
+            } catch (chargeErr: any) {
+              // SMS went out but billing failed — log loudly so admins can
+              // reconcile, but still mark as sent for the recipient view.
+              console.error('Agent invitation SMS wallet debit failed:', chargeErr);
+              smsSent = true;
+              smsError = `SMS sent but wallet debit failed: ${chargeErr?.message || 'unknown error'}`;
+            }
+          } else {
+            smsError = smsRes.error;
+          }
+        }
+      } catch (e) {
+        smsError = e instanceof Error ? e.message : 'SMS dispatch failed';
+        console.error('Agent invitation SMS error:', e);
+      }
+    }
+
+    // ----- Email notification (Resend) -----
+    let emailSent = false;
+    let emailError: string | undefined;
+    const recipientEmail = targetUser?.email;
+    if (recipientEmail && isValidEmail(recipientEmail)) {
+      try {
+        const html = generateAgentInvitationEmailHTML({
+          invitedName,
+          candidateName,
+          position: candidatePosition,
+          regionType,
+          regionName,
+          acceptUrl,
+          partyName: candidatePartyName,
+          followerCount: candidateFollowerCount,
+        });
+        const emailRes = await sendEmail({
+          to: recipientEmail,
+          subject: `You're invited to be ${candidateName}'s campaign agent`,
+          html,
+        });
+        emailSent = !!emailRes.success;
+        if (!emailRes.success) emailError = emailRes.error;
+      } catch (e) {
+        emailError = e instanceof Error ? e.message : 'Email dispatch failed';
+        console.error('Agent invitation email error:', e);
+      }
+    }
+
+    const channels = [
+      targetUser?.id ? 'in-app' : null,
+      smsSent ? 'SMS' : null,
+      emailSent ? 'email' : null,
+    ].filter(Boolean) as string[];
 
     return NextResponse.json({
       success: true,
@@ -354,9 +537,16 @@ export async function POST(request: NextRequest) {
       acceptUrl,
       userExists: !!targetUser,
       notified: !!targetUser?.id,
-      message: targetUser
-        ? `Invitation sent to ${invitedName}. They will be alerted in-app.`
-        : `Invitation created. Share this link: ${acceptUrl}`,
+      smsSent,
+      smsError,
+      smsCost,
+      emailSent,
+      emailError,
+      channels,
+      message:
+        channels.length > 0
+          ? `Invitation sent to ${invitedName} via ${channels.join(', ')}.`
+          : `Invitation created. Share this link: ${acceptUrl}`,
     });
   } catch (error) {
     console.error('Agents POST error:', error);

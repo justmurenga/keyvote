@@ -13,7 +13,10 @@ import type {
   ReportItem,
   ResultItem,
   MessageItem,
+  ConversationItem,
+  ConversationMessage,
   FollowingItem,
+  SystemSettings,
 } from './types';
 
 /**
@@ -242,6 +245,62 @@ export const messagesApi = {
     c(client).post<{ success: boolean; message: MessageItem }>('/api/messages', payload),
   markRead: (id: string, client?: ApiClient) =>
     c(client).patch<{ success: boolean }>(`/api/messages/${id}/read`),
+
+  /**
+   * Conversations list — uses the richer /api/messages endpoint that returns
+   * the conversation rows the web inbox screens use.
+   */
+  conversations: (
+    params: { scope?: 'mine' | 'all' } = {},
+    client?: ApiClient,
+  ) =>
+    c(client).get<{
+      conversations: ConversationItem[];
+      meta: { isAdmin: boolean; scope: string; currentUserId: string };
+    }>('/api/messages', { query: params as any }),
+
+  /** Get the messages inside a single conversation thread. */
+  thread: (
+    conversationId: string,
+    params: { limit?: number; before?: string } = {},
+    client?: ApiClient,
+  ) =>
+    c(client).get<{ messages: ConversationMessage[] }>(
+      `/api/messages/${conversationId}`,
+      { query: params as any },
+    ),
+
+  /** Send a new message inside an existing conversation. */
+  sendInConversation: (
+    payload: { conversationId: string; content: string; mediaUrl?: string; mediaType?: string },
+    client?: ApiClient,
+  ) =>
+    c(client).post<{ message: ConversationMessage }>('/api/messages', payload),
+
+  /** Start (or reuse) a conversation. */
+  startConversation: (
+    payload:
+      | { type: 'candidate_agent'; otherUserId: string }
+      | { type: 'admin_user'; recipientUserId: string; subject?: string; initialMessage?: string }
+      | { type: 'broadcast_to_agents'; initialMessage: string; countyId?: string; constituencyId?: string; wardId?: string; pollingStationId?: string },
+    client?: ApiClient,
+  ) =>
+    c(client).post<{ conversation?: ConversationItem; broadcast?: boolean; delivered?: number; total?: number }>(
+      '/api/messages/conversations',
+      payload,
+    ),
+
+  /** Archive (soft-delete) a conversation. */
+  archive: (conversationId: string, client?: ApiClient) =>
+    c(client).delete<{ success: boolean }>(`/api/messages/${conversationId}`),
+};
+
+// ---------------------------------------------------------------------------
+// System settings (public)
+// ---------------------------------------------------------------------------
+
+export const settingsApi = {
+  get: (client?: ApiClient) => c(client).get<SystemSettings>('/api/settings'),
 };
 
 export const followingApi = {
@@ -263,4 +322,5 @@ export const myVoteApi = {
   results: resultsApi,
   messages: messagesApi,
   following: followingApi,
+  settings: settingsApi,
 };

@@ -78,12 +78,15 @@ export const DEFAULT_BILLABLE_ITEMS: BillableItem[] = [
     validity_days: 30,
   },
   // ---- Voter "invite friends" SMS (per message) ----
+  // NOTE: price is the unified per-SMS price (KES 1). Setting price to 0
+  // here (or via system_settings.billable_items) means invites are free —
+  // no wallet charge is required and the SMS is sent at no cost to the voter.
   {
     id: 'voter_invite_sms',
     name: 'Invite Friend SMS',
     description:
       'A single SMS sent from the system sender ID inviting a friend to follow your candidate.',
-    price: 2,
+    price: 1,
     category: 'messaging',
     is_active: true,
     quantity: 1,
@@ -124,6 +127,11 @@ export const DEFAULT_BILLABLE_ITEMS: BillableItem[] = [
 /**
  * Load the live billable items catalog from system_settings,
  * falling back to DEFAULT_BILLABLE_ITEMS if it is missing.
+ *
+ * Admin-saved overrides are MERGED on top of the defaults (matched by id)
+ * rather than replacing them, so removing the row in the admin UI never
+ * accidentally takes a critical billable item (e.g. `voter_invite_sms`)
+ * offline platform-wide.
  */
 export async function getBillableItems(): Promise<BillableItem[]> {
   try {
@@ -134,8 +142,19 @@ export async function getBillableItems(): Promise<BillableItem[]> {
       .eq('key', 'billable_items')
       .single();
     if (settings?.value && Array.isArray(settings.value)) {
-      const items = settings.value as unknown as BillableItem[];
-      if (items.length > 0) return items;
+      const overrides = settings.value as unknown as BillableItem[];
+      if (overrides.length > 0) {
+        const byId = new Map<string, BillableItem>();
+        // Seed with defaults so anything the admin didn't override is still available.
+        for (const item of DEFAULT_BILLABLE_ITEMS) byId.set(item.id, item);
+        // Apply admin overrides (price, name, is_active, etc.) on top.
+        for (const item of overrides) {
+          if (item && typeof item.id === 'string') {
+            byId.set(item.id, { ...byId.get(item.id), ...item } as BillableItem);
+          }
+        }
+        return Array.from(byId.values());
+      }
     }
   } catch {
     /* fall through */
@@ -145,10 +164,18 @@ export async function getBillableItems(): Promise<BillableItem[]> {
 
 /**
  * Look up a single billable item by id. Returns null if missing or inactive.
+ * Falls back to the default catalog if the live settings don't include the id,
+ * so newly-introduced items work even before admins re-save settings.
  */
 export async function findBillableItem(itemId: string): Promise<BillableItem | null> {
   const items = await getBillableItems();
-  const item = items.find((i) => i.id === itemId && i.is_active !== false);
+  let item = items.find((i) => i.id === itemId && i.is_active !== false);
+  if (!item) {
+    const fallback = DEFAULT_BILLABLE_ITEMS.find(
+      (i) => i.id === itemId && i.is_active !== false,
+    );
+    if (fallback) item = fallback;
+  }
   return item || null;
 }
 

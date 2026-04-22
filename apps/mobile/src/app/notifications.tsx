@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,11 @@ import {
   type AppNotification,
 } from '@/services/notifications';
 import { FontSize, Spacing, BorderRadius } from '@/constants/theme';
+import {
+  getSoundEnabled,
+  setSoundEnabled,
+  onSoundPreferenceChanged,
+} from '@/lib/sound';
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   agent_invitation: 'shield-checkmark',
@@ -47,6 +52,16 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const { notifications, loading, refresh, setNotifications, setUnreadCount } = useNotifications();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [soundOn, setSoundOn] = useState<boolean>(getSoundEnabled());
+
+  // Keep the header toggle in sync if the preference changes elsewhere.
+  useEffect(() => onSoundPreferenceChanged(setSoundOn), []);
+
+  const toggleSound = async () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    await setSoundEnabled(next);
+  };
 
   const onMarkAllRead = async () => {
     await markAllNotificationsRead();
@@ -151,9 +166,22 @@ export default function NotificationsScreen() {
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Notifications</Text>
-        <TouchableOpacity onPress={onMarkAllRead} style={styles.iconBtn}>
-          <Text style={[styles.markAll, { color: colors.primary }]}>Mark all read</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity
+            onPress={toggleSound}
+            style={styles.iconBtn}
+            accessibilityLabel={soundOn ? 'Mute notification sounds' : 'Unmute notification sounds'}
+          >
+            <Ionicons
+              name={soundOn ? 'notifications' : 'notifications-off'}
+              size={22}
+              color={soundOn ? colors.primary : colors.textSecondary}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onMarkAllRead} style={styles.iconBtn}>
+            <Text style={[styles.markAll, { color: colors.primary }]}>Mark all read</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList

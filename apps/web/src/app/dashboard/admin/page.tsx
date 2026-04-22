@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePermissions } from '@/hooks/use-permissions';
+import { AdminPendingTasksBanner } from '@/components/dashboard/admin-pending-tasks-banner';
 
 interface SystemStats {
   users: { total: number; active: number; verified: number; byRole: Record<string, number> };
@@ -155,6 +156,9 @@ export default function AdminDashboardPage() {
           {role === 'system_admin' ? 'System Admin' : 'Admin'}
         </Badge>
       </div>
+
+      {/* Pending tasks banner — surfaces candidates / parties / reports / sender IDs awaiting admin action */}
+      <AdminPendingTasksBanner />
 
       {/* Stat Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

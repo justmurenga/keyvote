@@ -19,6 +19,7 @@ import {
   DollarSign,
   KeyRound,
   FileText,
+  Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePermissions } from '@/hooks/use-permissions';
@@ -33,6 +34,7 @@ interface AdminNavItem {
 
 const adminNavItems: AdminNavItem[] = [
   { href: '/dashboard/admin', label: 'Overview', icon: LayoutDashboard },
+  { href: '/dashboard/admin/analytics', label: 'System Analytics', icon: Activity },
   { href: '/dashboard/admin/users', label: 'Users', icon: Users, permission: 'users:view' },
   { href: '/dashboard/admin/roles', label: 'Role Management', icon: KeyRound, permission: 'users:view' },
   { href: '/dashboard/admin/roles/audit', label: 'Role Audit Log', icon: FileText, permission: 'users:view' },

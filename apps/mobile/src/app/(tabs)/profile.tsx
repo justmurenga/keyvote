@@ -24,6 +24,7 @@ import {
   getBiometricTypes,
   getBiometricTypeName,
 } from '@/lib/biometric-auth';
+import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -33,6 +34,7 @@ export default function ProfileScreen() {
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricType, setBiometricType] = useState('Biometric');
   const [isBiometricLoading, setIsBiometricLoading] = useState(false);
+  const { settings } = useSystemSettings();
 
   useEffect(() => {
     checkBiometricAvailability();
@@ -147,6 +149,7 @@ export default function ProfileScreen() {
       title: 'Activity',
       items: [
         { icon: 'heart-outline', label: 'Following', action: 'following' },
+        { icon: 'chatbubbles-outline', label: 'Messages', action: 'messages' },
         { icon: 'stats-chart-outline', label: 'My Votes', action: 'my-votes' },
         { icon: 'wallet-outline', label: 'Wallet', action: 'wallet' },
         { icon: 'flag-outline', label: 'Reports', action: 'reports' },
@@ -193,6 +196,9 @@ export default function ProfileScreen() {
       case 'following':
         router.push('/following' as any);
         break;
+      case 'messages':
+        router.push('/messages' as any);
+        break;
       case 'my-votes':
         router.push('/(tabs)/polls' as any);
         break;
@@ -205,9 +211,15 @@ export default function ProfileScreen() {
       case 'notifications':
         router.push('/notifications');
         break;
-      case 'help':
-        Alert.alert('Help & Support', 'Contact support at support@keyvote.online');
+      case 'help': {
+        const lines = [
+          settings.supportEmail ? `Email: ${settings.supportEmail}` : null,
+          settings.supportPhone ? `Phone: ${settings.supportPhone}` : null,
+          settings.ussdCode ? `USSD: ${settings.ussdCode}` : null,
+        ].filter(Boolean).join('\n');
+        Alert.alert('Help & Support', lines || 'Contact support for assistance.');
         break;
+      }
       case 'terms':
         Alert.alert('Terms & Privacy', 'View our terms of service and privacy policy.');
         break;
@@ -382,7 +394,7 @@ export default function ProfileScreen() {
 
         {/* App Version */}
         <Text style={[styles.version, { color: colors.textTertiary }]}>
-          myVote Kenya v1.0.0
+          {settings.siteName || 'myVote Kenya'} v1.0.0
         </Text>
       </ScrollView>
     </SafeAreaView>

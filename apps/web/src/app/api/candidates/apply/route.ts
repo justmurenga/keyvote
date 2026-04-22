@@ -2,6 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getApiCurrentUser } from '@/lib/auth/get-user';
+import { notifyAdmins, createInAppNotification } from '@/lib/notifications';
+import { generateCandidatePendingApprovalEmailHTML } from '@/lib/email/templates/candidate-pending-approval';
+
+const POSITION_LABELS: Record<string, string> = {
+  president: 'President',
+  governor: 'Governor',
+  senator: 'Senator',
+  women_rep: "Women's Representative",
+  mp: 'Member of Parliament',
+  mca: 'Member of County Assembly',
+};
+
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  'https://myvote.ke';
 
 export async function POST(request: NextRequest) {
   try {
@@ -148,6 +164,69 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to create candidate profile. Please try again.' },
         { status: 500 }
       );
+    }
+
+    // ----- Notify admins (in-app + email) and confirm receipt to candidate -----
+    try {
+      const candidateName = candidate?.user?.full_name || 'A new candidate';
+      const positionLabel = POSITION_LABELS[position] || position;
+      const regionLabel =
+        candidate?.county?.name ||
+        candidate?.constituency?.name ||
+        candidate?.ward?.name ||
+        'National';
+      const partyLabel = candidate?.party?.name
+        ? `${candidate.party.name}${candidate.party.abbreviation ? ` (${candidate.party.abbreviation})` : ''}`
+        : 'Independent';
+      const reviewUrl = `${APP_URL}/dashboard/admin/candidates`;
+      const appliedAt = new Date().toLocaleString('en-KE', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'Africa/Nairobi',
+      });
+
+      // Admin alerts (in-app to every admin + companion email)
+      await notifyAdmins({
+        type: 'candidate_pending_approval',
+        title: 'Candidate awaiting approval',
+        body: `${candidateName} applied for ${positionLabel} (${regionLabel}, ${partyLabel}). Review and verify.`,
+        action_url: '/dashboard/admin/candidates',
+        action_label: 'Review Candidate',
+        metadata: {
+          candidate_id: candidate.id,
+          user_id: currentUser.id,
+          position,
+          region: regionLabel,
+          party: partyLabel,
+        },
+        email: {
+          subject: `Pending approval: ${candidateName} (${positionLabel})`,
+          html: generateCandidatePendingApprovalEmailHTML({
+            candidateName,
+            candidatePhone: candidate?.user?.phone || null,
+            candidateEmail: candidate?.user?.email || null,
+            position,
+            regionLabel,
+            partyLabel,
+            reviewUrl,
+            appliedAt,
+          }),
+        },
+      });
+
+      // In-app receipt for the candidate themselves
+      await createInAppNotification({
+        user_id: currentUser.id,
+        type: 'candidate_application_submitted',
+        title: 'Application submitted',
+        body: `Your candidate application for ${positionLabel} is under review. Add a verified email to receive an alert the moment you're approved.`,
+        action_url: '/dashboard/candidate',
+        action_label: 'Open Candidate Dashboard',
+        metadata: { candidate_id: candidate.id },
+      });
+    } catch (notifyErr) {
+      // Never fail the apply request just because notifications didn't go out.
+      console.error('[candidates/apply] notification dispatch failed:', notifyErr);
     }
 
     return NextResponse.json(
